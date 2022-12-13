@@ -3,7 +3,8 @@ module github.com/hallyn/atomfs
 require (
 	github.com/apex/log v1.9.0
 	github.com/urfave/cli v1.22.10
-	stackerbuild.io/stacker v0.0.0-20221211232612-56e75ee07926
+	golang.org/x/sys v0.3.0
+	stackerbuild.io/stacker v0.0.0-20221213145702-2187eb316bd8
 )
 
 require (
@@ -87,8 +88,7 @@ require (
 	golang.org/x/crypto v0.3.0 // indirect
 	golang.org/x/net v0.2.0 // indirect
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
-	golang.org/x/sys v0.3.0 // indirect
-	golang.org/x/term v0.2.0 // indirect
+	golang.org/x/term v0.3.0 // indirect
 	golang.org/x/text v0.4.0 // indirect
 	google.golang.org/genproto v0.0.0-20220303160752-862486edd9cc // indirect
 	google.golang.org/grpc v1.44.0 // indirect
@@ -98,6 +98,6 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
-replace stackerbuild.io/stacker => github.com/hallyn/stacker-1 v0.0.0-20221211232612-56e75ee07926
+replace stackerbuild.io/stacker => github.com/hallyn/stacker-1 v0.0.0-20221219195901-30cda769addb
 
 go 1.19

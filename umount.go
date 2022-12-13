@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/urfave/cli"
+	"stackerbuild.io/stacker/pkg/mount"
 )
 
 var umountCmd = cli.Command{
@@ -19,6 +20,11 @@ func umountUsage(me string) error {
 	return fmt.Errorf("Usage: %s mountpoint", me)
 }
 
+func isMountpoint(p string) bool {
+	mounted, err := mount.IsMountpoint(p)
+	return err == nil && mounted
+}
+
 func doUmount(ctx *cli.Context) error {
 	if ctx.NArg() < 1 {
 		return umountUsage(ctx.App.Name)
@@ -26,11 +32,19 @@ func doUmount(ctx *cli.Context) error {
 
 	mountpoint := ctx.Args()[0]
 
-	errs := []error{}
+	var err error
+	var errs []error
+
+	if !filepath.IsAbs(mountpoint) {
+		mountpoint, err = filepath.Abs(mountpoint)
+		if err != nil {
+			return fmt.Errorf("Failed to find mountpoint: %w", err)
+		}
+	}
 
 	// We expect the argument to be the mountpoint - either a readonly
 	// bind mount, or a writeable overlay.
-	err := syscall.Unmount(mountpoint, 0)
+	err = syscall.Unmount(mountpoint, 0)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("Failed unmounting %s: %v", mountpoint, err))
 	}
@@ -54,10 +68,10 @@ func doUmount(ctx *cli.Context) error {
 	}
 
 	for _, m := range mounts {
-		if !m.IsDir() {
+		p = filepath.Join(mountsdir, m.Name())
+		if !m.IsDir() || !isMountpoint(p) {
 			continue
 		}
-		p = filepath.Join(mountsdir, m.Name())
 		err = syscall.Unmount(p, 0)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("Failed unmounting squashfs dir %s: %v", p, err))

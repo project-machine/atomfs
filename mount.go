@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/sys/unix"
 	"github.com/urfave/cli"
-	satomfs "stackerbuild.io/stacker/atomfs"
+	satomfs "stackerbuild.io/stacker/pkg/atomfs"
 )
 
 var mountCmd = cli.Command{
