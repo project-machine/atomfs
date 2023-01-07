@@ -4,7 +4,7 @@ require (
 	github.com/apex/log v1.9.0
 	github.com/urfave/cli v1.22.10
 	golang.org/x/sys v0.3.0
-	stackerbuild.io/stacker v0.0.0-20221213145702-2187eb316bd8
+	stackerbuild.io/stacker v0.40.2-0.20230106185850-3fb1a5554136
 )
 
 require (
@@ -98,6 +98,5 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
-replace stackerbuild.io/stacker => github.com/hallyn/stacker-1 v0.0.0-20221219195901-30cda769addb
 
 go 1.19

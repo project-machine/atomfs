@@ -2035,3 +2035,5 @@ sigs.k8s.io/structured-merge-diff/v4 v4.0.3/go.mod h1:bJZC9H9iH24zzfZ/41RGcq60oK
 sigs.k8s.io/structured-merge-diff/v4 v4.1.2/go.mod h1:j/nl6xW8vLS49O8YvXW1ocPhZawJtm+Yrr7PPRQ0Vg4=
 sigs.k8s.io/yaml v1.1.0/go.mod h1:UJmg0vDUVViEyp3mgSv9WPwZCDxu4rQW1olrI1uml+o=
 sigs.k8s.io/yaml v1.2.0/go.mod h1:yfXDCHCao9+ENCvLSE62v9VSji2MKu5jeNfTrofGhJc=
+stackerbuild.io/stacker v0.40.2-0.20230106185850-3fb1a5554136 h1:xoi0MQfUGj85VQsgTkXmmQpdPzVgcBsrNoz7U7BBg+I=
+stackerbuild.io/stacker v0.40.2-0.20230106185850-3fb1a5554136/go.mod h1:cWGCf9MV6Em6DCHu2v14HRsjiCZCpmXZSg7n5RXPo1k=
