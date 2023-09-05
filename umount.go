@@ -11,9 +11,9 @@ import (
 )
 
 var umountCmd = cli.Command{
-	Name:    "umount",
-	Usage:   "unmount atomfs image",
-	Action:  doUmount,
+	Name:   "umount",
+	Usage:  "unmount atomfs image",
+	Action: doUmount,
 }
 
 func umountUsage(me string) error {

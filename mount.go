@@ -6,15 +6,15 @@ import (
 	"strings"
 	"syscall"
 
-	"golang.org/x/sys/unix"
 	"github.com/urfave/cli"
+	"golang.org/x/sys/unix"
 	satomfs "stackerbuild.io/stacker/pkg/atomfs"
 )
 
 var mountCmd = cli.Command{
-	Name:    "mount",
-	Usage:   "mount atomfs image",
-	Action:  doMount,
+	Name:   "mount",
+	Usage:  "mount atomfs image",
+	Action: doMount,
 	Flags: []cli.Flag{
 		cli.BoolFlag{
 			Name:  "ro",
@@ -62,10 +62,10 @@ func doMount(ctx *cli.Context) error {
 	}
 
 	opts := satomfs.MountOCIOpts{
-		OCIDir: ocidir,
+		OCIDir:       ocidir,
 		MetadataPath: metadir,
-		Tag: tag,
-		Target: rodest,
+		Tag:          tag,
+		Target:       rodest,
 	}
 
 	mol, err := satomfs.BuildMoleculeFromOCI(opts)
