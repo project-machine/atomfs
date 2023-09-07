@@ -20,18 +20,18 @@ var mountCmd = cli.Command{
 	Action: doMount,
 	Flags: []cli.Flag{
 		cli.StringFlag{
-			Name:  "upper, upperdir",
-			Usage: "Directory to use as writeable overlay",
+			Name:  "persist, upper, upperdir",
+			Usage: "Specify a directory to use as writeable overlay (implies --writeable)",
 		},
 		cli.BoolFlag{
-			Name:  "writeable",
-			Usage: "Make writeable using an overlay",
+			Name:  "writeable, writable",
+			Usage: "Make the mount writeable using an overlay (ephemeral by default)",
 		},
 	},
 }
 
 func mountUsage(me string) error {
-	return fmt.Errorf("Usage: atomfs mount [--writeable [--upper=/tmp/upperdir]] ocidir:tag target")
+	return fmt.Errorf("Usage: atomfs mount [--writeable] [--persist=/tmp/upperdir] ocidir:tag target")
 }
 
 func findImage(ctx *cli.Context) (string, string, error) {
@@ -104,7 +104,7 @@ func doMount(ctx *cli.Context) error {
 		return err
 	}
 
-	if ctx.Bool("writeable") {
+	if ctx.Bool("writeable") || ctx.IsSet("persist") {
 		err = overlay(target, rodest, metadir, ctx)
 	} else {
 		err = bind(target, rodest)
@@ -180,9 +180,9 @@ func overlay(target, rodest, metadir string, ctx *cli.Context) error {
 	if err := EnsureDir(workdir); err != nil {
 		return err
 	}
-	upperdir := filepath.Join(metadir, "upper")
-	if ctx.IsSet("upper") {
-		upperdir = ctx.String("upper")
+	upperdir := filepath.Join(metadir, "persist")
+	if ctx.IsSet("persist") {
+		upperdir = ctx.String("persist")
 	}
 	if err := EnsureDir(upperdir); err != nil {
 		return err
