@@ -15,9 +15,9 @@ jobs:
       - name: install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install bats fuse3 make \
-            libcryptsetup-dev libgpgme-dev libcap-dev lxc \
-            libdevmapper-dev libacl1-dev libarchive-tools squashfs-tools
+          sudo apt-get install bats fuse3 make libcryptsetup-dev libgpgme-dev \
+          libcap-dev lxc libdevmapper-dev libacl1-dev libarchive-tools \
+          squashfuse squashfs-tools
       - name: setup lxc
         run: |
           chmod ugo+x $HOME
@@ -50,6 +50,7 @@ jobs:
           echo "$u veth lxcbr0 100" | sudo tee -a /etc/lxc/lxc-usernet
       - name: install skopeo
         run: |
+          mkdir ~/bin
           wget -O ~/bin/skopeo --progress=dot:mega https://github.com/project-machine/tools/releases/download/v0.0.1/skopeo
           chmod 755 ~/bin/skopeo
           sudo cp -f ~/bin/skopeo /usr/bin/skopeo
@@ -60,18 +61,19 @@ jobs:
         run: |
           go get -v ./...
           make
-          mkdir -p ~/bin
-	  cp atomfs ~/bin
+          cp atomfs ~/bin
       - name: test
         run: |
-	  export PATH=~/bin:$PATH
+          export PATH=~/bin:$PATH
           skopeo copy docker://zothub.io/machine/bootkit/bootkit:v0.0.16.230901-squashfs oci:oci:bootkit-squashfs
-	  mkdir upper
-	  atomfs mount --upper=upper oci:bootkit-squashfs dest
-	  [ -d dest/bootkit ]
-	  touch dest/zz
-	  atomfs umount dest
-	  [ -f upper/zz ]
+          mkdir upper
+          lxc-usernsexec -s << EOF
+          atomfs mount --upper=upper oci:bootkit-squashfs dest
+          [ -d dest/bootkit ]
+          touch dest/zz
+          atomfs umount dest
+          [ -f upper/zz ]
+          EOF
 
       - name: Release
         uses: softprops/action-gh-release@v1
