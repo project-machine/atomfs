@@ -24,14 +24,14 @@ var mountCmd = cli.Command{
 			Usage: "Directory to use as writeable overlay",
 		},
 		cli.BoolFlag{
-			Name:  "ro",
-			Usage: "Do not make writeable using an overlay",
+			Name:  "writeable",
+			Usage: "Make writeable using an overlay",
 		},
 	},
 }
 
 func mountUsage(me string) error {
-	return fmt.Errorf("Usage: atomfs mount [--upper=/tmp/upperdir] [--ro=true] ocidir:tag target")
+	return fmt.Errorf("Usage: atomfs mount [--writeable [--upper=/tmp/upperdir]] ocidir:tag target")
 }
 
 func findImage(ctx *cli.Context) (string, string, error) {
@@ -104,10 +104,10 @@ func doMount(ctx *cli.Context) error {
 		return err
 	}
 
-	if ctx.Bool("ro") {
-		err = bind(target, rodest)
-	} else {
+	if ctx.Bool("writeable") {
 		err = overlay(target, rodest, metadir, ctx)
+	} else {
+		err = bind(target, rodest)
 	}
 
 	complete = true
