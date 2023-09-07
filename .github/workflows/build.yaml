@@ -66,9 +66,8 @@ jobs:
         run: |
           export PATH=~/bin:$PATH
           skopeo copy docker://zothub.io/machine/bootkit/bootkit:v0.0.16.230901-squashfs oci:oci:bootkit-squashfs
-          mkdir upper
           lxc-usernsexec -s << EOF
-          atomfs mount --writeable --upperdir=upper oci:bootkit-squashfs dest
+          atomfs mount --persist=upper oci:bootkit-squashfs dest
           [ -d dest/bootkit ]
           touch dest/zz
           atomfs umount dest
