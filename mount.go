@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -9,6 +11,7 @@ import (
 	"github.com/urfave/cli"
 	"golang.org/x/sys/unix"
 	satomfs "stackerbuild.io/stacker/pkg/atomfs"
+	"stackerbuild.io/stacker/pkg/squashfs"
 )
 
 var mountCmd = cli.Command{
@@ -42,10 +45,15 @@ func findImage(ctx *cli.Context) (string, string, error) {
 }
 
 func doMount(ctx *cli.Context) error {
-	if ctx.NArg() != 2 {
-		return fmt.Errorf("source and destination required")
+	if !amPrivileged() {
+		fmt.Println("Please run as root, or in a user namespace")
+		fmt.Println(" You could try:")
+		fmt.Println("\tlxc-usernsexec -s -- /bin/bash")
+		fmt.Println(" or")
+		fmt.Println("\tunshare -Umr -- /bin/bash")
+		fmt.Println("then run from that shell")
+		os.Exit(1)
 	}
-
 	ocidir, tag, err := findImage(ctx)
 	if err != nil {
 		return err
@@ -53,9 +61,23 @@ func doMount(ctx *cli.Context) error {
 
 	target := ctx.Args()[1]
 	metadir := filepath.Join(target, "meta")
+
+	complete := false
+
+	defer func() {
+		if !complete {
+			cleanupDest(metadir)
+		}
+	}()
+
+	if PathExists(metadir) {
+		return fmt.Errorf("%q exists: cowardly refusing to mess with it", metadir)
+	}
+
 	if err := EnsureDir(metadir); err != nil {
 		return err
 	}
+
 	rodest := filepath.Join(metadir, "ro")
 	if err = EnsureDir(rodest); err != nil {
 		return err
@@ -84,11 +106,69 @@ func doMount(ctx *cli.Context) error {
 		err = overlay(target, rodest, metadir)
 	}
 
+	complete = true
+	return nil
+}
+
+func cleanupDest(metadir string) {
+	fmt.Printf("Failure detected: cleaning up %q", metadir)
+	rodest := filepath.Join(metadir, "ro")
+	if PathExists(rodest) {
+		if err := unix.Unmount(rodest, 0); err != nil {
+			fmt.Printf("Failed unmounting %q: %v", rodest, err)
+		}
+	}
+
+	mountsdir := filepath.Join(metadir, "mounts")
+	entries, err := os.ReadDir(mountsdir)
 	if err != nil {
-		satomfs.Umount(rodest)
-		return err
+		fmt.Printf("Failed reading contents of %q: %v", mountsdir, err)
+		os.RemoveAll(metadir)
+		return
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		fmt.Printf("Failed getting working directory")
+		os.RemoveAll(metadir)
+	}
+	for _, e := range entries {
+		n := filepath.Base(e.Name())
+		if n == "workaround" {
+			continue
+		}
+		if strings.HasSuffix(n, ".log") {
+			continue
+		}
+		p := filepath.Join(wd, mountsdir, e.Name())
+		if err := squashUmount(p); err != nil {
+			fmt.Printf("Failed unmounting %q: %v\n", p, err)
+		}
+	}
+	os.RemoveAll(metadir)
+}
+
+func RunCommand(args ...string) error {
+	cmd := exec.Command(args[0], args[1:]...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s: %s: %s", strings.Join(args, " "), err, string(output))
 	}
 	return nil
+}
+
+func amPrivileged() bool {
+	if os.Geteuid() == 0 {
+		return true
+	}
+	return false
+}
+
+func squashUmount(p string) error {
+	if amPrivileged() {
+		return squashfs.Umount(p)
+	}
+	return RunCommand("fusermount", "-u", p)
 }
 
 func overlay(target, rodest, metadir string) error {

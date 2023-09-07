@@ -85,5 +85,9 @@ func doUmount(ctx *cli.Context) error {
 		return fmt.Errorf("Encountered errors %d: %v", len(errs), errs)
 	}
 
+	if err := os.RemoveAll(metadir); err != nil {
+		return fmt.Errorf("Failed removing %q: %v", metadir, err)
+	}
+
 	return nil
 }
