@@ -12,11 +12,19 @@ atomfs umount mnt
 
 Longer example:
 ```
-serge@jerom ~$ lxc-usernsexec -s
-root@jerom ~$ atomfs mount zothub:busybox-squashfs dest
-root@jerom ~$ ls dest
+$ lxc-usernsexec -s
+$ atomfs mount zothub:busybox-squashfs dest
+$ ls dest
 bin  dev  etc  home  lib  lib64  root  tmp  usr  var
-root@jerom ~$ atomfs umount dest
+$ atomfs umount dest
+$ mkdir upper
+$ atomfs mount --upper=./upper zothub:busybox-squashfs dest
+$ ls dest
+bin  dev  etc  home  lib  lib64  root  tmp  usr  var
+$ touch dest/ab
+$ atomfs umount dest
+$ ls upper/
+ab
 ```
 
 # Implementation details
