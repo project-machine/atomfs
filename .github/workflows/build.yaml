@@ -1,0 +1,81 @@
+on:
+  push:
+  pull_request:
+name: build
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up golang
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.21
+      - name: install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install bats fuse3 make \
+            libcryptsetup-dev libgpgme-dev libcap-dev lxc \
+            libdevmapper-dev libacl1-dev libarchive-tools squashfs-tools
+      - name: setup lxc
+        run: |
+          chmod ugo+x $HOME
+          cat /etc/subuid /etc/subgid
+          u=$(id -un) && g=$(id -gn)
+          echo "u=$u g=$g"
+          uidmap=$(awk -F: '$1 == u { print $2, $3 }' "u=$u" /etc/subuid)
+          gidmap=$(awk -F: '$1 == g { print $2, $3 }' "g=$g" /etc/subgid)
+          if [ "$u" = "runner" ] && [ -z "$gidmap" ]; then
+            # 'id -gn' shows docker, but 'runner' is in subgid
+            g="runner"
+            gidmap=$(awk -F: '$1 == g { print $2, $3 }' "g=$g" /etc/subgid)
+          fi
+          echo "uidmap=$uidmap."
+          echo "gidmap=$gidmap."
+          [ -n "$uidmap" ] && [ -n "$gidmap" ] ||
+              { echo "did not get uidmap or gidmap for u=$u g=$g"; exit 1; }
+          mkdir -p ~/.config/lxc/
+          echo "writing .config/lxc/default.conf"
+          tee ~/.config/lxc/default.conf <<EOF
+          lxc.include = /etc/lxc/default.conf
+          lxc.idmap = u 0 $uidmap
+          lxc.idmap = g 0 $gidmap
+          EOF
+          set -x
+          cat ~/.config/lxc/default.conf
+          cat /etc/subuid
+
+          echo "writing /etc/lxc/lxc-usernet"
+          echo "$u veth lxcbr0 100" | sudo tee -a /etc/lxc/lxc-usernet
+      - name: install skopeo
+        run: |
+          wget -O ~/bin/skopeo --progress=dot:mega https://github.com/project-machine/tools/releases/download/v0.0.1/skopeo
+          chmod 755 ~/bin/skopeo
+          sudo cp -f ~/bin/skopeo /usr/bin/skopeo
+      - name: lint
+        run: |
+          make gofmt
+      - name: make
+        run: |
+          go get -v ./...
+          make
+          mkdir -p ~/bin
+	  cp atomfs ~/bin
+      - name: test
+        run: |
+	  export PATH=~/bin:$PATH
+          skopeo copy docker://zothub.io/machine/bootkit/bootkit:v0.0.16.230901-squashfs oci:oci:bootkit-squashfs
+	  mkdir upper
+	  atomfs mount --upper=upper oci:bootkit-squashfs dest
+	  [ -d dest/bootkit ]
+	  touch dest/zz
+	  atomfs umount dest
+	  [ -f upper/zz ]
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            atomfs
