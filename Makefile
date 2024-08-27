@@ -1,4 +1,4 @@
-all: atomfs
+all: gotest atomfs
 
 MAIN_VERSION ?= $(shell git describe --always --dirty || echo no-git)
 ifeq ($(MAIN_VERSION),$(filter $(MAIN_VERSION), "", no-git))
@@ -19,6 +19,9 @@ gofmt: .made-gofmt
 
 atomfs: .made-gofmt $(GO_SRC)
 	cd $(ROOT)/cmd/atomfs && go build -buildvcs=false -ldflags "$(VERSION_LDFLAGS)" -o $(ROOT)/bin/atomfs ./...
+
+gotest: $(GO_SRC)
+	go test -ldflags "$(VERSION_LDFLAGS)"  ./...
 
 clean:
 	rm -f $(ROOT)/cmd/atomfs/atomfs
