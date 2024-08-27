@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,8 +11,8 @@ import (
 
 	"github.com/urfave/cli"
 	"golang.org/x/sys/unix"
-	satomfs "stackerbuild.io/stacker/pkg/atomfs"
-	"stackerbuild.io/stacker/pkg/squashfs"
+	"machinerun.io/atomfs"
+	"machinerun.io/atomfs/squashfs"
 )
 
 var mountCmd = cli.Command{
@@ -30,8 +31,8 @@ var mountCmd = cli.Command{
 	},
 }
 
-func mountUsage(me string) error {
-	return fmt.Errorf("Usage: atomfs mount [--writeable] [--persist=/tmp/upperdir] ocidir:tag target")
+func mountUsage(_ string) error {
+	return errors.New("Usage: atomfs mount [--writeable] [--persist=/tmp/upperdir] ocidir:tag target")
 }
 
 func findImage(ctx *cli.Context) (string, string, error) {
@@ -87,14 +88,14 @@ func doMount(ctx *cli.Context) error {
 		return err
 	}
 
-	opts := satomfs.MountOCIOpts{
+	opts := atomfs.MountOCIOpts{
 		OCIDir:       ocidir,
 		MetadataPath: metadir,
 		Tag:          tag,
 		Target:       rodest,
 	}
 
-	mol, err := satomfs.BuildMoleculeFromOCI(opts)
+	mol, err := atomfs.BuildMoleculeFromOCI(opts)
 	if err != nil {
 		return err
 	}
@@ -110,8 +111,8 @@ func doMount(ctx *cli.Context) error {
 		err = bind(target, rodest)
 	}
 
-	complete = true
-	return nil
+	complete = err == nil
+	return err
 }
 
 func cleanupDest(metadir string) {
@@ -162,10 +163,7 @@ func RunCommand(args ...string) error {
 }
 
 func amPrivileged() bool {
-	if os.Geteuid() == 0 {
-		return true
-	}
-	return false
+	return os.Geteuid() == 0
 }
 
 func squashUmount(p string) error {
