@@ -1,4 +1,4 @@
-module github.com/project-machine/atomfs
+module machinerun.io/atomfs
 
 require (
 	github.com/apex/log v1.9.0
