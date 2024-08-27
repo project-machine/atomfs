@@ -6,8 +6,8 @@ $(error "Bad value for MAIN_VERSION: '$(MAIN_VERSION)'")
 endif
 
 ROOT := $(shell git rev-parse --show-toplevel)
-GO_SRC_DIRS := . $(ROOT)/cmd/atomfs
-GO_SRC := $(shell find $(GO_SRC_DIRS) -name "*.go")
+GO_SRC_DIRS := $(shell find . -name "*.go" | xargs -n1 dirname | sort -u)
+GO_SRC := $(shell find . -name "*.go")
 VERSION_LDFLAGS=-X main.Version=$(MAIN_VERSION)
 
 .PHONY: gofmt
@@ -21,8 +21,8 @@ atomfs: .made-gofmt $(GO_SRC)
 	cd $(ROOT)/cmd/atomfs && go build -buildvcs=false -ldflags "$(VERSION_LDFLAGS)" -o $(ROOT)/bin/atomfs ./...
 
 gotest: $(GO_SRC)
-	go test -ldflags "$(VERSION_LDFLAGS)"  ./...
+	go test -coverprofile=coverage.txt -ldflags "$(VERSION_LDFLAGS)"  ./...
 
 clean:
-	rm -f $(ROOT)/cmd/atomfs/atomfs
+	rm -f $(ROOT)/bin
 	rm .made-*
