@@ -58,7 +58,6 @@ VERSION
 *.dll
 *.so
 *.dylib
-atomfs
 .made-gofmt
 
 # Test binary, build with `go test -c`
