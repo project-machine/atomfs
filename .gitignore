@@ -1,1 +1,68 @@
+# local development tailoring
+go.work
+go.work.sum
+.tool-versions
+
+# app
+
+# tool and bin directories
+.tmp/
+bin/
+/bin
+/.bin
+/build
+/dist
+/snapshot
+/.tool
+/.task
+
+# changelog generation
+CHANGELOG.md
+VERSION
+
+# IDE configuration
+.vscode/
+.idea/
+.server/
+.history/
+
+# probable archives
+.images
+*.tar
+*.jar
+*.war
+*.ear
+*.jpi
+*.hpi
+*.zip
+*.iml
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, build with `go test -c`
+*.test
+
+# OS files
+.DS_Store
+
+*.profile
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 atomfs
+.made-gofmt
+
+# Test binary, build with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
