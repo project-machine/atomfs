@@ -7,7 +7,7 @@ import (
 	"syscall"
 
 	"github.com/urfave/cli"
-	"stackerbuild.io/stacker/pkg/mount"
+	"machinerun.io/atomfs/mount"
 )
 
 var umountCmd = cli.Command{

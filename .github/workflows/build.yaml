@@ -64,8 +64,8 @@ jobs:
         run: |
           go get -v ./...
           make
-          cp atomfs ~/bin
-          cp atomfs atomfs-${{ matrix.os }}
+          cp ./bin/atomfs ~/bin
+          cp ./bin/atomfs atomfs-${{ matrix.os }}
       - name: test
         run: |
           export PATH=~/bin:$PATH
