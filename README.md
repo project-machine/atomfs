@@ -1,9 +1,9 @@
 # atomfs [![GoDoc](https://godoc.org/machinerun.io/atomfs?status.svg)](https://godoc.org/machinerun.io/atomfs) [![build](https://github.com/project-machine/atomfs/actions/workflows/build.yaml/badge.svg?branch=main)](https://github.com/project-machine/atomfs/actions/workflows/build.yaml) [![codecov](https://codecov.io/gh/project-machine/atomfs/graph/badge.svg?token=175HCB255L)](https://codecov.io/gh/project-machine/atomfs) [![Apache 2 licensed](https://img.shields.io/badge/license-Apache2-blue.svg)](https://raw.githubusercontent.com/gojini/signal/main/LICENSE)
 
 `atomfs` is a tool that can mount OCI images built in the `squashfs` format as
-as read-only `overlay` filesystem that can be used by a container runtime. In
-addition to setting up the mount, `atomfs` can also set up a verity check on the
-squashfs image to ensure that the image is not tampered with during the runtime.
+a read-only `overlayfs` filesystem that can be used by a container runtime.
+
+For OCI-squashfs images that were created with dm-verity data appended, which [stacker](https://stackerbuild.io) does by default, then atomfs will mount each individual squashfs layer using dm-verity before constructing the final overlayfs stack. This ensures the integrity of the contents of the image when mounted, and the use of squashfs removes the window of time between tar extraction and image mounting when an image could be tampered with.
 
 ## atomfs library
 
