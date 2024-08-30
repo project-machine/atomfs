@@ -1,4 +1,15 @@
-# atomfs binary
+# atomfs [![GoDoc](https://godoc.org/machinerun.io/atomfs?status.svg)](https://godoc.org/machinerun.io/atomfs) [![build](https://github.com/project-machine/atomfs/actions/workflows/build.yaml/badge.svg?branch=main)](https://github.com/project-machine/atomfs/actions/workflows/build.yaml) [![codecov](https://codecov.io/gh/project-machine/atomfs/graph/badge.svg?token=175HCB255L)](https://codecov.io/gh/project-machine/atomfs) [![Apache 2 licensed](https://img.shields.io/badge/license-Apache2-blue.svg)](https://raw.githubusercontent.com/gojini/signal/main/LICENSE)
+
+`atomfs` is a tool that can mount OCI images built in the `squashfs` format as
+as read-only `overlay` filesystem that can be used by a container runtime. In
+addition to setting up the mount, `atomfs` can also set up a verity check on the
+squashfs image to ensure that the image is not tampered with during the runtime.
+
+## atomfs library
+
+Please find the atomfs library documentation at [godoc](https://godoc.org/machinerun.io/atomfs).
+
+## atomfs binary
 
 This can be used to mount an OCI+squashfs image.  If you are host
 root, then squashfs will be mounted by the kernel.  If you are
