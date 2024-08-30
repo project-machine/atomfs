@@ -45,6 +45,7 @@ var uidmapTests = []uidmapTestcase{
 }
 
 func TestAmHostRoot(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 	for _, testcase := range uidmapTests {
 		v := uidmapIsHost(testcase.uidmap)

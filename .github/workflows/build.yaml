@@ -60,10 +60,13 @@ jobs:
       - name: lint
         run: |
           make gofmt
+      - name : unit
+        run: |
+          make gotest
       - name: make
         run: |
           go get -v ./...
-          make
+          make atomfs
           cp ./bin/atomfs ~/bin
           cp ./bin/atomfs atomfs-${{ matrix.os }}
       - name: test
@@ -77,7 +80,12 @@ jobs:
           atomfs umount dest
           [ -f upper/zz ]
           EOF
-
+      - name: Upload code coverage
+        uses: codecov/codecov-action@v4
+        with:
+          fail_ci_if_error: true # optional (default = false)
+          files: ./coverage.txt
+          token: ${{ secrets.CODECOV_TOKEN }} # required
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
