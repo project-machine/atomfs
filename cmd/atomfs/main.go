@@ -18,6 +18,7 @@ func main() {
 	app.Commands = []cli.Command{
 		mountCmd,
 		umountCmd,
+		verifyCmd,
 	}
 
 	app.Flags = []cli.Flag{
