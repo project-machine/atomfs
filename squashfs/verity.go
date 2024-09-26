@@ -6,7 +6,7 @@ package squashfs
 // #include <errno.h>
 // #include <libdevmapper.h>
 /*
-int get_verity_params(char *device, char **params)
+int get_verity_params(char *device, char **params, int task_type)
 {
 	struct dm_task *dmt;
 	struct dm_info dmi;
@@ -14,7 +14,7 @@ int get_verity_params(char *device, char **params)
 	uint64_t start, length;
 	char *type, *tmpParams;
 
-	dmt = dm_task_create(DM_DEVICE_TABLE);
+	dmt = dm_task_create(task_type);
 	if (!dmt)
 		return 1;
 
@@ -59,6 +59,16 @@ out:
 	dm_task_destroy(dmt);
 	return r;
 }
+int get_verity_table_params(char *device, char **params)
+{
+   return get_verity_params(device, params, DM_DEVICE_TABLE);
+}
+
+int get_verity_status_params(char *device, char **params)
+{
+   return get_verity_params(device, params, DM_DEVICE_STATUS);
+}
+
 */
 import "C"
 
@@ -369,6 +379,17 @@ func HostMount(squashfs string, mountpoint string, rootHash string) error {
 				return err
 			}
 		}
+
+		// we have to check `dmsetup status $device` here because
+		// ActivateByVolumeKey will return some errors but will only WARN to
+		// stderr if corruption was found just after activation. It will
+		// reliably return success for a corrupted image, and we need to check
+		// the same thing it checks for its warning.
+		err = ConfirmExistingVerityDeviceCurrentValidity(verityDevPath)
+		if err != nil {
+			return err
+		}
+
 	} else {
 		loopDev, err = losetup.Attach(squashfs, 0, true)
 		if err != nil {
@@ -497,7 +518,7 @@ func ConfirmExistingVerityDeviceHash(devicePath string, rootHash string, allowVe
 
 	var cParams *C.char
 
-	rc := C.get_verity_params(cDevice, &cParams)
+	rc := C.get_verity_table_params(cDevice, &cParams)
 	if rc != 0 {
 		if allowVerityFailure {
 			return nil
@@ -518,5 +539,30 @@ func ConfirmExistingVerityDeviceHash(devicePath string, rootHash string, allowVe
 		return errors.Errorf("invalid root hash for %v: %v (expected: %v)", device, fields[7], rootHash)
 	}
 
+	return nil
+}
+
+func ConfirmExistingVerityDeviceCurrentValidity(devicePath string) error {
+	device := filepath.Base(devicePath)
+	cDevice := C.CString(device)
+	defer C.free(unsafe.Pointer(cDevice))
+
+	var cParams *C.char
+
+	rc := C.get_verity_status_params(cDevice, &cParams)
+	if rc != 0 {
+		return errors.Errorf("problem getting dm params from %v: %v", device, rc)
+	}
+	defer C.free(unsafe.Pointer(cParams))
+
+	params := C.GoString(cParams)
+
+	if len(params) != 1 {
+		return errors.Errorf("invalid params for dm status for %q: %+v", device, params)
+	}
+	// valid values are "C": corruption has been found, or "V": no corruption found, yet.
+	if params != "V" {
+		return errors.Errorf("verity reports corruption on device %q", device)
+	}
 	return nil
 }
