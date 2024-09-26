@@ -11,13 +11,14 @@ import (
 )
 
 var umountCmd = cli.Command{
-	Name:   "umount",
-	Usage:  "unmount atomfs image",
-	Action: doUmount,
+	Name:      "umount",
+	Usage:     "unmount atomfs image",
+	ArgsUsage: "mountpoint",
+	Action:    doUmount,
 }
 
 func umountUsage(me string) error {
-	return fmt.Errorf("Usage: %s mountpoint", me)
+	return fmt.Errorf("Usage: %s umount mountpoint", me)
 }
 
 func isMountpoint(p string) bool {

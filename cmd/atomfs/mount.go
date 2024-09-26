@@ -16,9 +16,10 @@ import (
 )
 
 var mountCmd = cli.Command{
-	Name:   "mount",
-	Usage:  "mount atomfs image",
-	Action: doMount,
+	Name:      "mount",
+	Usage:     "mount atomfs image",
+	ArgsUsage: "ocidir:tag target",
+	Action:    doMount,
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  "persist, upper, upperdir",
@@ -50,6 +51,15 @@ func findImage(ctx *cli.Context) (string, string, error) {
 }
 
 func doMount(ctx *cli.Context) error {
+
+	if len(ctx.Args()) == 0 {
+		return mountUsage(ctx.App.Name)
+	}
+
+	ocidir, tag, err := findImage(ctx)
+	if err != nil {
+		return err
+	}
 	if !amPrivileged() {
 		fmt.Println("Please run as root, or in a user namespace")
 		fmt.Println(" You could try:")
@@ -59,11 +69,6 @@ func doMount(ctx *cli.Context) error {
 		fmt.Println("then run from that shell")
 		os.Exit(1)
 	}
-	ocidir, tag, err := findImage(ctx)
-	if err != nil {
-		return err
-	}
-
 	target := ctx.Args()[1]
 	metadir := filepath.Join(target, "meta")
 
