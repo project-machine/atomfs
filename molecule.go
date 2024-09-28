@@ -61,6 +61,10 @@ func (m Molecule) mountUnderlyingAtoms() error {
 				if err != nil {
 					return err
 				}
+				err = squashfs.ConfirmExistingVerityDeviceCurrentValidity(mountpoint.Source)
+				if err != nil {
+					return err
+				}
 			}
 			continue
 		}
