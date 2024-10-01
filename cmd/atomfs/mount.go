@@ -70,7 +70,12 @@ func doMount(ctx *cli.Context) error {
 		os.Exit(1)
 	}
 	target := ctx.Args()[1]
-	metadir := filepath.Join(target, "meta")
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return err
+	}
+
+	metadir := filepath.Join("/run", "atomfs", "meta", ReplacePathSeparators(absTarget))
 
 	complete := false
 
@@ -92,12 +97,24 @@ func doMount(ctx *cli.Context) error {
 	if err = EnsureDir(rodest); err != nil {
 		return err
 	}
+	absOCIDir, err := filepath.Abs(ocidir)
+	if err != nil {
+		return err
+	}
+	absMetadir, err := filepath.Abs(metadir)
+	if err != nil {
+		return err
+	}
+	absRODest, err := filepath.Abs(rodest)
+	if err != nil {
+		return err
+	}
 
 	opts := atomfs.MountOCIOpts{
-		OCIDir:       ocidir,
-		MetadataPath: metadir,
+		OCIDir:       absOCIDir,
+		MetadataPath: absMetadir,
 		Tag:          tag,
-		Target:       rodest,
+		Target:       absRODest,
 	}
 
 	mol, err := atomfs.BuildMoleculeFromOCI(opts)
