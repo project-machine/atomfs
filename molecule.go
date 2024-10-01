@@ -165,6 +165,11 @@ func (m Molecule) Mount(dest string) error {
 		return err
 	}
 
+	err = m.config.WriteToFile(filepath.Join(m.config.MetadataPath, "config.json"))
+	if err != nil {
+		return err
+	}
+
 	// now, do the actual overlay mount
 	err = unix.Mount("overlay", dest, "overlay", 0, mntOpts)
 	return errors.Wrapf(err, "couldn't do overlay mount to %s, opts: %s", dest, mntOpts)

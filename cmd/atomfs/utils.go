@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 func EnsureDir(dir string) error {
@@ -19,4 +20,13 @@ func PathExists(d string) bool {
 		return false
 	}
 	return true
+}
+
+// remove dir separators to make one dir name. It is OK that this can't be
+// cleanly backed out, we don't need it to
+func ReplacePathSeparators(p string) string {
+	if p[0] == '/' {
+		p = p[1:]
+	}
+	return strings.ReplaceAll(p, "/", "-")
 }

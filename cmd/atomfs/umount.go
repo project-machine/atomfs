@@ -50,11 +50,12 @@ func doUmount(ctx *cli.Context) error {
 		errs = append(errs, fmt.Errorf("Failed unmounting %s: %v", mountpoint, err))
 	}
 
-	// Now that we've unmounted the mountpoint, we expect the following
-	// under there:
-	// $mountpoint/meta/ro - the original readonly overlay mountpoint
-	// $mountpoint/meta/mounts/* - the original squashfs mounts
-	metadir := filepath.Join(mountpoint, "meta")
+	// We expect the following in the metadir
+	//
+	// $metadir/ro - the original readonly overlay mountpoint
+	// $metadir/meta/mounts/* - the original squashfs mounts
+	// $metadir/meta/config.json
+	metadir := filepath.Join("/run/atomfs/meta", ReplacePathSeparators(mountpoint))
 	p := filepath.Join(metadir, "ro")
 	err = syscall.Unmount(p, 0)
 	if err != nil {
@@ -65,7 +66,7 @@ func doUmount(ctx *cli.Context) error {
 	mounts, err := os.ReadDir(mountsdir)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("Failed reading list of mounts: %v", err))
-		return fmt.Errorf("Encountered errors: %#v", errs)
+		return fmt.Errorf("Encountered errors: %v", errs)
 	}
 
 	for _, m := range mounts {
