@@ -12,20 +12,16 @@ import (
 
 type MountOCIOpts struct {
 	OCIDir                 string
-	MetadataPath           string
 	Tag                    string
 	Target                 string
+	AddWriteableOverlay    bool
+	WriteableOverlayPath   string
 	AllowMissingVerityData bool
 }
 
 func (c MountOCIOpts) AtomsPath(parts ...string) string {
 	atoms := path.Join(c.OCIDir, "blobs", "sha256")
 	return path.Join(append([]string{atoms}, parts...)...)
-}
-
-func (c MountOCIOpts) MountedAtomsPath(parts ...string) string {
-	mounts := path.Join(c.MetadataPath, "mounts")
-	return path.Join(append([]string{mounts}, parts...)...)
 }
 
 func (c MountOCIOpts) WriteToFile(filename string) error {

@@ -20,7 +20,7 @@ func TestAllowMissingVerityData(t *testing.T) {
 		Atoms: []ispec.Descriptor{{Digest: d}},
 	}
 
-	err := mol.mountUnderlyingAtoms()
+	err, _ := mol.mountUnderlyingAtoms()
 	assert.NotNil(err)
 	assert.Equal(fmt.Sprintf("sha256:%s is missing verity data", hash), err.Error())
 }

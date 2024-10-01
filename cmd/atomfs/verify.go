@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/urfave/cli"
+	"machinerun.io/atomfs"
 	"machinerun.io/atomfs/mount"
 	"machinerun.io/atomfs/squashfs"
 )
@@ -41,9 +42,12 @@ func doVerify(ctx *cli.Context) error {
 		return fmt.Errorf("%s is not a mountpoint", mountpoint)
 	}
 
-	// hidden by the final overlay mount, but visible in the mountinfo:
-	// $mountpoint/meta/mounts/* - the original squashfs mounts
-	mountsdir := filepath.Join(mountpoint, "meta", "mounts")
+	mountNSName, err := atomfs.GetMountNSName()
+	if err != nil {
+		return err
+	}
+
+	mountsdir := filepath.Join(atomfs.RuntimeDir(), "meta", mountNSName, atomfs.ReplacePathSeparators(mountpoint), "mounts")
 
 	mounts, err := mount.ParseMounts("/proc/self/mountinfo")
 	if err != nil {
