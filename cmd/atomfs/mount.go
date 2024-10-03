@@ -12,7 +12,7 @@ import (
 	"github.com/urfave/cli"
 	"golang.org/x/sys/unix"
 	"machinerun.io/atomfs"
-	"machinerun.io/atomfs/squashfs"
+	"machinerun.io/atomfs/pkg/squashfs"
 )
 
 var mountCmd = cli.Command{

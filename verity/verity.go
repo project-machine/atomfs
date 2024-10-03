@@ -1,4 +1,4 @@
-package squashfs
+package verity
 
 // #cgo pkg-config: libcryptsetup devmapper --static
 // #include <libcryptsetup.h>
@@ -77,7 +77,7 @@ import (
 	"github.com/martinjungblut/go-cryptsetup"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
-	"machinerun.io/atomfs/mount"
+	"machinerun.io/atomfs/pkg/mount"
 )
 
 const VerityRootHashAnnotation = "io.stackeroci.stacker.squashfs_verity_root_hash"
@@ -130,7 +130,7 @@ func isCryptsetupEINVAL(err error) bool {
 
 var cryptsetupTooOld = errors.Errorf("libcryptsetup not new enough, need >= 2.3.0")
 
-func appendVerityData(file string) (string, error) {
+func AppendVerityData(file string) (string, error) {
 	fi, err := os.Lstat(file)
 	if err != nil {
 		return "", errors.WithStack(err)
@@ -179,27 +179,8 @@ func appendVerityData(file string) (string, error) {
 	return fmt.Sprintf("%x", rootHash), errors.WithStack(err)
 }
 
-func verityDataLocation(sblock *superblock) (uint64, error) {
-	squashLen := sblock.size
-
-	// squashfs is padded out to the nearest 4k
-	if squashLen%4096 != 0 {
-		squashLen = squashLen + (4096 - squashLen%4096)
-	}
-
-	return squashLen, nil
-}
-
 func verityName(p string) string {
-	return fmt.Sprintf("%s-%s", p, veritySuffix)
-}
-
-func fileChanged(a os.FileInfo, path string) bool {
-	b, err := os.Lstat(path)
-	if err != nil {
-		return true
-	}
-	return !os.SameFile(a, b)
+	return fmt.Sprintf("%s-%s", p, VeritySuffix)
 }
 
 // Mount a filesystem as container root, without host root
@@ -454,7 +435,7 @@ func Umount(mountpoint string) error {
 	// was this a verity mount or a regular loopback mount? (if it's a
 	// regular loopback mount, we detached it above, so need to do anything
 	// special here; verity doesn't play as nicely)
-	if strings.HasSuffix(theMount.Source, veritySuffix) {
+	if strings.HasSuffix(theMount.Source, VeritySuffix) {
 		// find the loop device that backs the verity device
 		deviceNo, err := findLoopBackingVerity(theMount.Source)
 		if err != nil {

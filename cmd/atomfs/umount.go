@@ -7,7 +7,7 @@ import (
 	"syscall"
 
 	"github.com/urfave/cli"
-	"machinerun.io/atomfs/mount"
+	"machinerun.io/atomfs/pkg/mount"
 )
 
 var umountCmd = cli.Command{

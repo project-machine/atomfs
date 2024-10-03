@@ -1,6 +1,6 @@
 // This package is a small go "library" (read: exec wrapper) around the
-// mksquashfs binary that provides some useful primitives.
-package squashfs
+// mkfs.erofs binary that provides some useful primitives.
+package erofs
 
 import (
 	"bytes"
@@ -18,8 +18,8 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
-	"machinerun.io/atomfs/log"
-	"machinerun.io/atomfs/mount"
+	"machinerun.io/atomfs/pkg/log"
+	"machinerun.io/atomfs/pkg/mount"
 )
 
 var checkZstdSupported sync.Once
@@ -31,7 +31,7 @@ var exPolInfo struct {
 	policy *ExtractPolicy
 }
 
-// ExcludePaths represents a list of paths to exclude in a squashfs listing.
+// ExcludePaths represents a list of paths to exclude in a erofs listing.
 // Users should do something like filepath.Walk() over the whole filesystem,
 // calling AddExclude() or AddInclude() based on whether they want to include
 // or exclude a particular file. Note that if e.g. /usr is excluded, then
@@ -44,14 +44,14 @@ type ExcludePaths struct {
 	include []string
 }
 
-type squashFuseInfoStruct struct {
+type erofsFuseInfoStruct struct {
 	Path           string
 	Version        string
 	SupportsNotfiy bool
 }
 
 var once sync.Once
-var squashFuseInfo = squashFuseInfoStruct{"", "", false}
+var erofsFuseInfo = erofsFuseInfoStruct{"", "", false}
 
 func NewExcludePaths() *ExcludePaths {
 	return &ExcludePaths{
@@ -116,7 +116,7 @@ func (eps *ExcludePaths) String() (string, error) {
 	return buf.String(), nil
 }
 
-func MakeSquashfs(tempdir string, rootfs string, eps *ExcludePaths, verity VerityMetadata) (io.ReadCloser, string, string, error) {
+func MakeErofs(tempdir string, rootfs string, eps *ExcludePaths, verity VerityMetadata) (io.ReadCloser, string, string, error) {
 	var excludesFile string
 	var err error
 	var toExclude string
@@ -130,7 +130,7 @@ func MakeSquashfs(tempdir string, rootfs string, eps *ExcludePaths, verity Verit
 	}
 
 	if len(toExclude) != 0 {
-		excludes, err := os.CreateTemp(tempdir, "stacker-squashfs-exclude-")
+		excludes, err := os.CreateTemp(tempdir, "stacker-erofs-exclude-")
 		if err != nil {
 			return nil, "", rootHash, err
 		}
@@ -144,42 +144,42 @@ func MakeSquashfs(tempdir string, rootfs string, eps *ExcludePaths, verity Verit
 		}
 	}
 
-	tmpSquashfs, err := os.CreateTemp(tempdir, "stacker-squashfs-img-")
+	tmpErofs, err := os.CreateTemp(tempdir, "stacker-erofs-img-")
 	if err != nil {
 		return nil, "", rootHash, err
 	}
-	tmpSquashfs.Close()
-	os.Remove(tmpSquashfs.Name())
-	defer os.Remove(tmpSquashfs.Name())
-	args := []string{rootfs, tmpSquashfs.Name()}
+	tmpErofs.Close()
+	os.Remove(tmpErofs.Name())
+	defer os.Remove(tmpErofs.Name())
+	args := []string{tmpErofs.Name(), rootfs}
 	compression := GzipCompression
-	if mksquashfsSupportsZstd() {
-		args = append(args, "-comp", "zstd")
+	if mkerofsSupportsZstd() {
+		args = append(args, "-z", "zstd")
 		compression = ZstdCompression
 	}
 	if len(toExclude) != 0 {
-		args = append(args, "-ef", excludesFile)
+		args = append(args, "--exclude-path", excludesFile)
 	}
-	cmd := exec.Command("mksquashfs", args...)
+	cmd := exec.Command("mkfs.erofs", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err = cmd.Run(); err != nil {
-		return nil, "", rootHash, errors.Wrap(err, "couldn't build squashfs")
+		return nil, "", rootHash, errors.Wrap(err, "couldn't build erofs")
 	}
 
 	if verity {
-		rootHash, err = appendVerityData(tmpSquashfs.Name())
+		rootHash, err = appendVerityData(tmpErofs.Name())
 		if err != nil {
 			return nil, "", rootHash, err
 		}
 	}
 
-	blob, err := os.Open(tmpSquashfs.Name())
+	blob, err := os.Open(tmpErofs.Name())
 	if err != nil {
 		return nil, "", rootHash, errors.WithStack(err)
 	}
 
-	return blob, GenerateSquashfsMediaType(compression, verity), rootHash, nil
+	return blob, GenerateErofsMediaType(compression, verity), rootHash, nil
 }
 
 func isMountedAtDir(_, dest string) (bool, error) {
@@ -208,28 +208,28 @@ func isMountedAtDir(_, dest string) (bool, error) {
 	return false, nil
 }
 
-func findSquashFuseInfo() {
-	var sqfsPath string
-	if p := which("squashfuse_ll"); p != "" {
-		sqfsPath = p
+func findErofsFuseInfo() {
+	var erofsPath string
+	if p := which("erofsfuse"); p != "" {
+		erofsPath = p
 	} else {
-		sqfsPath = which("squashfuse")
+		erofsPath = which("erofsfuse")
 	}
-	if sqfsPath == "" {
+	if erofsPath == "" {
 		return
 	}
-	version, supportsNotify := sqfuseSupportsMountNotification(sqfsPath)
-	log.Infof("Found squashfuse at %s (version=%s notify=%t)", sqfsPath, version, supportsNotify)
-	squashFuseInfo = squashFuseInfoStruct{sqfsPath, version, supportsNotify}
+	version, supportsNotify := erofsfuseSupportsMountNotification(erofsPath)
+	log.Infof("Found erofsfuse at %s (version=%s notify=%t)", erofsPath, version, supportsNotify)
+	erofsFuseInfo = erofsFuseInfoStruct{erofsPath, version, supportsNotify}
 }
 
-// sqfuseSupportsMountNotification - returns true if squashfuse supports mount
+// erofsfuseSupportsMountNotification - returns true if erofsfuse supports mount
 // notification, false otherwise
-// sqfuse is the path to the squashfuse binary
-func sqfuseSupportsMountNotification(sqfuse string) (string, bool) {
-	cmd := exec.Command(sqfuse)
+// erofsfuse is the path to the erofsfuse binary
+func erofsfuseSupportsMountNotification(erofsfuse string) (string, bool) {
+	cmd := exec.Command(erofsfuse)
 
-	// `squashfuse` always returns an error...  so we ignore it.
+	// `erofsfuse` always returns an error...  so we ignore it.
 	out, _ := cmd.CombinedOutput()
 
 	firstLine := strings.Split(string(out[:]), "\n")[0]
@@ -238,7 +238,7 @@ func sqfuseSupportsMountNotification(sqfuse string) (string, bool) {
 	if err != nil {
 		return version, false
 	}
-	// squashfuse notify mechanism was merged in 0.5.0
+	// erofsfuse notify mechanism was merged in 0.5.0
 	constraint, err := semver.NewConstraint(">= 0.5.0")
 	if err != nil {
 		return version, false
@@ -249,22 +249,22 @@ func sqfuseSupportsMountNotification(sqfuse string) (string, bool) {
 	return version, false
 }
 
-var squashNotFound = errors.Errorf("squashfuse program not found")
+var squashNotFound = errors.Errorf("erofsfuse program not found")
 
-// squashFuse - mount squashFile to extractDir
-// return a pointer to the squashfuse cmd.
+// erofsFuse - mount squashFile to extractDir
+// return a pointer to the erofsfuse cmd.
 // The caller of the this is responsible for the process created.
-func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
+func erofsFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 	var cmd *exec.Cmd
 
-	once.Do(findSquashFuseInfo)
-	if squashFuseInfo.Path == "" {
+	once.Do(findErofsFuseInfo)
+	if erofsFuseInfo.Path == "" {
 		return cmd, squashNotFound
 	}
 
 	notifyOpts := ""
 	notifyPath := ""
-	if squashFuseInfo.SupportsNotfiy {
+	if erofsFuseInfo.SupportsNotfiy {
 		sockdir, err := os.MkdirTemp("", "sock")
 		if err != nil {
 			return cmd, err
@@ -283,7 +283,7 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 	var cmdOut io.Writer
 	var err error
 
-	logf := filepath.Join(path.Dir(extractDir), "."+filepath.Base(extractDir)+"-squashfuse.log")
+	logf := filepath.Join(path.Dir(extractDir), "."+filepath.Base(extractDir)+"-erofsfuse.log")
 	if cmdOut, err = os.OpenFile(logf, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0644); err != nil {
 		log.Infof("Failed to open %s for write: %v", logf, err)
 		return cmd, err
@@ -299,20 +299,20 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 
 	// It would be nice to only enable debug (or maybe to only log to file at all)
 	// if 'stacker --debug', but we do not have access to that info here.
-	// to debug squashfuse, use "allow_other,debug"
+	// to debug erofsfuse, use "allow_other,debug"
 	optionArgs := "allow_other,debug"
 	if notifyOpts != "" {
 		optionArgs += "," + notifyOpts
 	}
-	cmd = exec.Command(squashFuseInfo.Path, "-f", "-o", optionArgs, squashFile, extractDir)
+	cmd = exec.Command(erofsFuseInfo.Path, "-f", "-o", optionArgs, squashFile, extractDir)
 	cmd.Stdin = nil
 	cmd.Stdout = cmdOut
 	cmd.Stderr = cmdOut
-	_, err = cmdOut.Write([]byte(fmt.Sprintf("# %s\n", strings.Join(cmd.Args, " "))))
+	cmdOut.Write([]byte(fmt.Sprintf("# %s\n", strings.Join(cmd.Args, " "))))
 	if err != nil {
 		return cmd, errors.Wrapf(err, "Failed writing to %s", logf)
 	}
-	log.Debugf("Extracting %s -> %s with %s [%s]", squashFile, extractDir, squashFuseInfo.Path, logf)
+	log.Debugf("Extracting %s -> %s with %s [%s]", squashFile, extractDir, erofsFuseInfo.Path, logf)
 	err = cmd.Start()
 	if err != nil {
 		return cmd, err
@@ -321,9 +321,9 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 	// now poll/wait for one of 3 things to happen
 	// a. child process exits - if it did, then some error has occurred.
 	// b. the directory Entry is different than it was before the call
-	//    to sqfuse.  We have to do this because we do not have another
+	//    to erofsfuse.  We have to do this because we do not have another
 	//    way to know when the mount has been populated.
-	//    https://github.com/vasi/squashfuse/issues/49
+	//    https://github.com/vasi/erofsfuse/issues/49
 	// c. a timeout (timeLimit) was hit
 	startTime := time.Now()
 	timeLimit := 30 * time.Second
@@ -332,9 +332,9 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 		_ = cmd.Wait()
 		close(alarmCh)
 	}()
-	if squashFuseInfo.SupportsNotfiy {
+	if erofsFuseInfo.SupportsNotfiy {
 		notifyCh := make(chan byte)
-		log.Infof("%s supports notify pipe, watching %q", squashFuseInfo.Path, notifyPath)
+		log.Infof("%s supports notify pipe, watching %q", erofsFuseInfo.Path, notifyPath)
 		go func() {
 			f, err := os.Open(notifyPath)
 			if err != nil {
@@ -347,7 +347,7 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 				if err != nil {
 					return
 				}
-				if n1 >= 1 {
+				if err == nil && n1 >= 1 {
 					break
 				}
 			}
@@ -356,13 +356,13 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 
 		select {
 		case <-alarmCh:
-			err = cmd.Process.Kill()
-			return cmd, errors.Wrapf(err, "Gave up on squashFuse mount of %s with %s after %s", squashFile, squashFuseInfo.Path, timeLimit)
+			cmd.Process.Kill()
+			return cmd, errors.Wrapf(err, "Gave up on erofsfuse mount of %s with %s after %s", squashFile, erofsFuseInfo.Path, timeLimit)
 		case ret := <-notifyCh:
 			if ret == 's' {
 				return cmd, nil
 			} else {
-				return cmd, errors.Errorf("squashfuse returned an error, check %s", logf)
+				return cmd, errors.Errorf("erofsfuse returned an error, check %s", logf)
 			}
 		}
 	}
@@ -370,11 +370,11 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 		if cmd.ProcessState != nil {
 			// process exited, the Wait() call in the goroutine above
 			// caused ProcessState to be populated.
-			return cmd, errors.Errorf("squashFuse mount of %s with %s exited unexpectedly with %d", squashFile, squashFuseInfo.Path, cmd.ProcessState.ExitCode())
+			return cmd, errors.Errorf("erofsfuse mount of %s with %s exited unexpectedly with %d", squashFile, erofsFuseInfo.Path, cmd.ProcessState.ExitCode())
 		}
 		if time.Since(startTime) > timeLimit {
-			err = cmd.Process.Kill()
-			return cmd, errors.Wrapf(err, "Gave up on squashFuse mount of %s with %s after %s", squashFile, squashFuseInfo.Path, timeLimit)
+			cmd.Process.Kill()
+			return cmd, errors.Wrapf(err, "Gave up on erofsfuse mount of %s with %s after %s", squashFile, erofsFuseInfo.Path, timeLimit)
 		}
 		if count%10 == 1 {
 			log.Debugf("%s is not yet mounted...(%s)", extractDir, time.Since(startTime))
@@ -410,7 +410,7 @@ func NewExtractPolicy(args ...string) (*ExtractPolicy, error) {
 
 	allEx := []SquashExtractor{
 		&KernelExtractor{},
-		&SquashFuseExtractor{},
+		&ErofsFuseExtractor{},
 		&UnsquashfsExtractor{},
 	}
 	byName := map[string]SquashExtractor{}
@@ -542,39 +542,39 @@ func (k *KernelExtractor) Mount(squashFile, extractDir string) error {
 	return retErr
 }
 
-type SquashFuseExtractor struct {
+type ErofsFuseExtractor struct {
 	mutex sync.Mutex
 }
 
-func (k *SquashFuseExtractor) Name() string {
-	return "squashfuse"
+func (k *ErofsFuseExtractor) Name() string {
+	return "erofsfuse"
 }
 
-func (k *SquashFuseExtractor) IsAvailable() error {
-	once.Do(findSquashFuseInfo)
-	if squashFuseInfo.Path == "" {
-		return errors.Errorf("no 'squashfuse' in PATH")
+func (k *ErofsFuseExtractor) IsAvailable() error {
+	once.Do(findErofsFuseInfo)
+	if erofsFuseInfo.Path == "" {
+		return errors.Errorf("no 'erofsfuse' in PATH")
 	}
 	return nil
 }
 
-func (k *SquashFuseExtractor) Mount(squashFile, extractDir string) error {
+func (k *ErofsFuseExtractor) Mount(erofsFile, extractDir string) error {
 	k.mutex.Lock()
 	defer k.mutex.Unlock()
 
-	if mounted, err := isMountedAtDir(squashFile, extractDir); mounted && err == nil {
-		log.Debugf("[%s] %s already mounted -> %s", k.Name(), squashFile, extractDir)
+	if mounted, err := isMountedAtDir(erofsFile, extractDir); mounted && err == nil {
+		log.Debugf("[%s] %s already mounted -> %s", k.Name(), erofsFile, extractDir)
 		return nil
 	} else if err != nil {
 		return err
 	}
 
-	cmd, err := squashFuse(squashFile, extractDir)
+	cmd, err := erofsFuse(erofsFile, extractDir)
 	if err != nil {
 		return err
 	}
 
-	log.Debugf("squashFuse mounted (%d) %s -> %s", cmd.Process.Pid, squashFile, extractDir)
+	log.Debugf("erofsfuse mounted (%d) %s -> %s", cmd.Process.Pid, erofsFile, extractDir)
 	if err := cmd.Process.Release(); err != nil {
 		return errors.Errorf("Failed to release process %s: %v", cmd, err)
 	}
@@ -657,7 +657,7 @@ func ExtractSingleSquashPolicy(squashFile, extractDir string, policy *ExtractPol
 func ExtractSingleSquash(squashFile string, extractDir string) error {
 	exPolInfo.once.Do(func() {
 		const envName = "STACKER_SQUASHFS_EXTRACT_POLICY"
-		const defPolicy = "kmount squashfuse unsquashfs"
+		const defPolicy = "kmount erofsfuse unsquashfs"
 		val := os.Getenv(envName)
 		if val == "" {
 			val = defPolicy
@@ -677,16 +677,16 @@ func ExtractSingleSquash(squashFile string, extractDir string) error {
 	return ExtractSingleSquashPolicy(squashFile, extractDir, exPolInfo.policy)
 }
 
-func mksquashfsSupportsZstd() bool {
+func mkerofsSupportsZstd() bool {
 	checkZstdSupported.Do(func() {
 		var stdoutBuffer strings.Builder
 		var stderrBuffer strings.Builder
 
-		cmd := exec.Command("mksquashfs", "--help")
+		cmd := exec.Command("mkfs.erofs", "--help")
 		cmd.Stdout = &stdoutBuffer
 		cmd.Stderr = &stderrBuffer
 
-		// Ignore errs here as `mksquashfs --help` exit status code is 1
+		// Ignore errs here as `mkerofs --help` exit status code is 1
 		_ = cmd.Run()
 
 		if strings.Contains(stdoutBuffer.String(), "zstd") ||

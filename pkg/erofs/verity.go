@@ -77,7 +77,7 @@ import (
 	"github.com/martinjungblut/go-cryptsetup"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
-	"machinerun.io/atomfs/mount"
+	"machinerun.io/atomfs/pkg/mount"
 )
 
 const VerityRootHashAnnotation = "io.stackeroci.stacker.erofs_verity_root_hash"
