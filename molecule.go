@@ -71,8 +71,14 @@ func (m Molecule) mountUnderlyingAtoms() (error, func()) {
 
 		rootHash := a.Annotations[squashfs.VerityRootHashAnnotation]
 
-		if !m.config.AllowMissingVerityData && rootHash == "" {
-			return errors.Errorf("%v is missing verity data", a.Digest), cleanupAtoms
+		if !m.config.AllowMissingVerityData {
+
+			if rootHash == "" {
+				return errors.Errorf("%v is missing verity data", a.Digest), cleanupAtoms
+			}
+			if !squashfs.AmHostRoot() {
+				return errors.Errorf("won't guestmount an image with verity data without --allow-missing-verity"), cleanupAtoms
+			}
 		}
 
 		mounts, err := mount.ParseMounts("/proc/self/mountinfo")

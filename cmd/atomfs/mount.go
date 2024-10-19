@@ -28,6 +28,10 @@ var mountCmd = cli.Command{
 			Name:  "writeable, writable",
 			Usage: "Make the mount writeable using an overlay (ephemeral by default)",
 		},
+		cli.BoolFlag{
+			Name:  "allow-missing-verity",
+			Usage: "Mount even if the image has no verity data",
+		},
 	},
 }
 
@@ -87,11 +91,12 @@ func doMount(ctx *cli.Context) error {
 		}
 	}
 	opts := atomfs.MountOCIOpts{
-		OCIDir:               absOCIDir,
-		Tag:                  tag,
-		Target:               absTarget,
-		AddWriteableOverlay:  ctx.Bool("writeable") || ctx.IsSet("persist"),
-		WriteableOverlayPath: persistPath,
+		OCIDir:                 absOCIDir,
+		Tag:                    tag,
+		Target:                 absTarget,
+		AddWriteableOverlay:    ctx.Bool("writeable") || ctx.IsSet("persist"),
+		WriteableOverlayPath:   persistPath,
+		AllowMissingVerityData: ctx.Bool("allow-missing-verity"),
 	}
 
 	mol, err := atomfs.BuildMoleculeFromOCI(opts)
