@@ -7,6 +7,7 @@ import (
 
 	"github.com/urfave/cli"
 	"machinerun.io/atomfs"
+	"machinerun.io/atomfs/log"
 	"machinerun.io/atomfs/mount"
 	"machinerun.io/atomfs/squashfs"
 )
@@ -47,7 +48,8 @@ func doVerify(ctx *cli.Context) error {
 		return err
 	}
 
-	mountsdir := filepath.Join(atomfs.RuntimeDir(), "meta", mountNSName, atomfs.ReplacePathSeparators(mountpoint), "mounts")
+	metadir := filepath.Join(atomfs.RuntimeDir(), "meta", mountNSName, atomfs.ReplacePathSeparators(mountpoint))
+	mountsdir := filepath.Join(metadir, "mounts")
 
 	mounts, err := mount.ParseMounts("/proc/self/mountinfo")
 	if err != nil {
@@ -62,16 +64,19 @@ func doVerify(ctx *cli.Context) error {
 	}
 
 	allOK := true
+	checkedCount := 0
 	for _, m := range mounts {
-
-		if m.FSType != "squashfs" {
-			continue
-		}
-
 		if !strings.HasPrefix(m.Target, mountsdir) {
 			continue
 		}
-
+		if m.FSType == "fuse.squashfuse_ll" {
+			log.Warnf("found squashfuse mount not supported by verify at %q", m.Source)
+			continue
+		}
+		if m.FSType != "squashfs" {
+			continue
+		}
+		checkedCount = checkedCount + 1
 		err = squashfs.ConfirmExistingVerityDeviceCurrentValidity(m.Source)
 		if err != nil {
 			fmt.Printf("%s: CORRUPTION FOUND\n", m.Source)
@@ -79,6 +84,12 @@ func doVerify(ctx *cli.Context) error {
 		} else {
 			fmt.Printf("%s: OK\n", m.Source)
 		}
+	}
+
+	// TODO - want to also be able to compare to expected # of mounts from
+	// molecule, need to write more molecule info during mol.mount
+	if checkedCount == 0 {
+		return fmt.Errorf("no applicable mounts found in %q", mountsdir)
 	}
 
 	if allOK {
