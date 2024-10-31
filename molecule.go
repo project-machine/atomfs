@@ -242,18 +242,20 @@ func (m Molecule) Mount(dest string) error {
 			return err
 		}
 
-		workdir := filepath.Join(metadir, "work")
+		persistMetaPath := m.config.WriteableOverlayPath
+		if persistMetaPath == "" {
+			// no configured path, use metadir
+			persistMetaPath = metadir
+		}
+
+		workdir := filepath.Join(persistMetaPath, "work")
 		if err := EnsureDir(workdir); err != nil {
-			return errors.Wrapf(err, "failed to ensure workdir")
+			return errors.Wrapf(err, "failed to ensure workdir %q", workdir)
 		}
 
-		upperdir := m.config.WriteableOverlayPath
-		if upperdir == "" {
-			upperdir = filepath.Join(metadir, "persist")
-		}
-
+		upperdir := filepath.Join(persistMetaPath, "persist")
 		if err := EnsureDir(upperdir); err != nil {
-			return errors.Wrapf(err, "failed to ensure upperdir")
+			return errors.Wrapf(err, "failed to ensure upperdir %q", upperdir)
 		}
 
 		defer func() {

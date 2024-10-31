@@ -92,7 +92,7 @@ function setup() {
 }
 
 @test "mount with writeable overlay in separate dir" {
-    export PERSIST_DIR=${BATS_TEST_TMPDIR}/upperdir
+    export PERSIST_DIR=${BATS_TEST_TMPDIR}/persist-dir
     mkdir -p $PERSIST_DIR
     run atomfs --debug mount --persist=${PERSIST_DIR} ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
     assert_success
@@ -104,9 +104,9 @@ function setup() {
     run cp $MP/1.README.md $MP/3.README.md
     assert_success
 
-    assert_file_exists $PERSIST_DIR/this-time-let-me
-    assert_file_exists $PERSIST_DIR/3.README.md
-    assert_file_not_exists $PERSIST_DIR/1.README.md
+    assert_file_exists $PERSIST_DIR/persist/this-time-let-me
+    assert_file_exists $PERSIST_DIR/persist/3.README.md
+    assert_file_not_exists $PERSIST_DIR/persist/1.README.md
 
     run atomfs --debug umount $MP
     assert_success
@@ -117,6 +117,6 @@ function setup() {
     assert [ -z $( ls -A $ATOMFS_TEST_RUN_DIR/meta/$MY_MNTNSNAME/) ]
 
     # but persist dir should still be there:
-    assert_file_exists $PERSIST_DIR/this-time-let-me
-    assert_file_exists $PERSIST_DIR/3.README.md
+    assert_file_exists $PERSIST_DIR/persist/this-time-let-me
+    assert_file_exists $PERSIST_DIR/persist/3.README.md
 }

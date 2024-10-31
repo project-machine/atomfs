@@ -20,7 +20,7 @@ function setup() {
     lxc-usernsexec -s <<EOF
     set -x
     export ATOMFS_TEST_RUN_DIR=$ATOMFS_TEST_RUN_DIR
-    export PERSIST_DIR=${BATS_TEST_TMPDIR}/upperdir
+    export PERSIST_DIR=${BATS_TEST_TMPDIR}/persist-dir
     mkdir -p \$PERSIST_DIR
 
     export INNER_MNTNSNAME=\$(readlink /proc/self/ns/mnt | cut -c 6-15)
@@ -50,7 +50,7 @@ function setup() {
     find $ATOMFS_TEST_RUN_DIR/meta/\$INNER_MNTNSNAME/
 
     atomfs --debug umount $MP
-    [ -f \$PERSIST_DIR/let-me-write ]
+    [ -f \$PERSIST_DIR/persist/let-me-write ]
 
     # mount point and meta dir should be empty
     [ -d $MP ]
@@ -69,7 +69,7 @@ EOF
     lxc-usernsexec -s <<EOF
     set -x
     export ATOMFS_TEST_RUN_DIR=$ATOMFS_TEST_RUN_DIR
-    export PERSIST_DIR=${BATS_TEST_TMPDIR}/upperdir
+    export PERSIST_DIR=${BATS_TEST_TMPDIR}/persist-dir
     mkdir -p \$PERSIST_DIR
 
     export INNER_MNTNSNAME=\$(readlink /proc/self/ns/mnt | cut -c 6-15)
@@ -88,7 +88,7 @@ EOF
     set -e
 
     atomfs --debug umount $MP
-    [ -f \$PERSIST_DIR/let-me-write ]
+    [ -f \$PERSIST_DIR/persist/let-me-write ]
 
     [ -d $MP ]
     [ -z \$( ls -A $MP) ]

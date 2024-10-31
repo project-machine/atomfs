@@ -21,8 +21,8 @@ var mountCmd = cli.Command{
 	Action:    doMount,
 	Flags: []cli.Flag{
 		cli.StringFlag{
-			Name:  "persist, upper, upperdir",
-			Usage: "Specify a directory to use as writeable overlay (implies --writeable)",
+			Name:  "persist",
+			Usage: "Specify a directory to use for the workdir and upperdir of a writeable overlay (implies --writeable)",
 		},
 		cli.BoolFlag{
 			Name:  "writeable, writable",
