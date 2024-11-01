@@ -16,6 +16,12 @@ var umountCmd = cli.Command{
 	Usage:     "unmount atomfs image",
 	ArgsUsage: "mountpoint",
 	Action:    doUmount,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "metadir",
+			Usage: "Directory to use for metadata. Use this if /run/atomfs is not writable for some reason.",
+		},
+	},
 }
 
 func umountUsage(me string) error {
@@ -60,7 +66,7 @@ func doUmount(ctx *cli.Context) error {
 	if err != nil {
 		errs = append(errs, fmt.Errorf("Failed to get mount namespace name"))
 	}
-	metadir := filepath.Join(atomfs.RuntimeDir(), "meta", mountNSName, atomfs.ReplacePathSeparators(mountpoint))
+	metadir := filepath.Join(atomfs.RuntimeDir(ctx.String("metadir")), "meta", mountNSName, atomfs.ReplacePathSeparators(mountpoint))
 
 	mountsdir := filepath.Join(metadir, "mounts")
 	mounts, err := os.ReadDir(mountsdir)

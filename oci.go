@@ -17,6 +17,7 @@ type MountOCIOpts struct {
 	AddWriteableOverlay    bool
 	WriteableOverlayPath   string
 	AllowMissingVerityData bool
+	MetadataDir            string
 }
 
 func (c MountOCIOpts) AtomsPath(parts ...string) string {

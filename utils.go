@@ -43,10 +43,14 @@ func GetMountNSName() (string, error) {
 }
 
 // Allow overriding runtime dir for tests so we can assert empty dirs, etc.
-func RuntimeDir() string {
+func RuntimeDir(metadir string) string {
 	testOverrideDir := os.Getenv(TestOverrideRuntimeDirKey)
 	if testOverrideDir == "" {
-		return "/run/atomfs"
+		if metadir == "" {
+			return "/run/atomfs"
+		} else {
+			return metadir
+		}
 	}
 	return testOverrideDir
 }

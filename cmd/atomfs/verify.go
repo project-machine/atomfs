@@ -17,6 +17,12 @@ var verifyCmd = cli.Command{
 	Usage:     "check atomfs image for dm-verity errors",
 	ArgsUsage: "atomfs mountpoint",
 	Action:    doVerify,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "metadir",
+			Usage: "Directory to use for metadata. Use this if /run/atomfs is not writable for some reason.",
+		},
+	},
 }
 
 func verifyUsage(me string) error {
@@ -48,7 +54,7 @@ func doVerify(ctx *cli.Context) error {
 		return err
 	}
 
-	metadir := filepath.Join(atomfs.RuntimeDir(), "meta", mountNSName, atomfs.ReplacePathSeparators(mountpoint))
+	metadir := filepath.Join(atomfs.RuntimeDir(ctx.String("metadir")), "meta", mountNSName, atomfs.ReplacePathSeparators(mountpoint))
 	mountsdir := filepath.Join(metadir, "mounts")
 
 	mounts, err := mount.ParseMounts("/proc/self/mountinfo")

@@ -33,7 +33,7 @@ func (m Molecule) MetadataPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	metadir := filepath.Join(RuntimeDir(), "meta", mountNSName, ReplacePathSeparators(absTarget))
+	metadir := filepath.Join(RuntimeDir(m.config.MetadataDir), "meta", mountNSName, ReplacePathSeparators(absTarget))
 	return metadir, nil
 }
 

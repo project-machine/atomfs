@@ -100,3 +100,31 @@ EOF
     rm -rf $ATOMFS_TEST_RUN_DIR/meta
 EOF
 }
+
+@test "mount with custom metadir and no ATOMFS_TEST_RUN_DIR env var works as guest" {
+    unset ATOMFS_TEST_RUN_DIR
+    export -n ATOMFS_TEST_RUN_DIR
+
+    lxc-usernsexec -s <<EOF
+    set -x
+    export META_DIR=${BATS_TEST_TMPDIR}/metadir
+    mkdir -p \$META_DIR
+
+    export INNER_MNTNSNAME=\$(readlink /proc/self/ns/mnt | cut -c 6-15)
+
+    atomfs --debug mount --allow-missing-verity --metadir=\$META_DIR ${BATS_SUITE_TMPDIR}/oci-no-verity:test-squashfs $MP
+    [ -f $MP/1.README.md ]
+    [ -f $MP/random.txt ]
+
+    atomfs --debug umount --metadir=\$META_DIR $MP
+
+    [ -d $MP ]
+    [ -z \$( ls -A $MP) ]
+    [ -d $META_DIR/meta/\$INNER_MNTNSNAME/ ]
+
+    find $META_DIR/meta/\$INNER_MNTNSNAME/
+    [ -z \$( ls -A $ATOMFS_TEST_RUN_DIR/meta/\$INNER_MNTNSNAME/) ]
+    rm -rf \$META_DIR
+
+EOF
+}

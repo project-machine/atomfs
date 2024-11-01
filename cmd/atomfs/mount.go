@@ -32,6 +32,10 @@ var mountCmd = cli.Command{
 			Name:  "allow-missing-verity",
 			Usage: "Mount even if the image has no verity data",
 		},
+		cli.StringFlag{
+			Name:  "metadir",
+			Usage: "Directory to use for metadata. Use this if /run/atomfs is not writable for some reason.",
+		},
 	},
 }
 
@@ -97,6 +101,7 @@ func doMount(ctx *cli.Context) error {
 		AddWriteableOverlay:    ctx.Bool("writeable") || ctx.IsSet("persist"),
 		WriteableOverlayPath:   persistPath,
 		AllowMissingVerityData: ctx.Bool("allow-missing-verity"),
+		MetadataDir:            ctx.String("metadir"), // nil here means /run/atomfs
 	}
 
 	mol, err := atomfs.BuildMoleculeFromOCI(opts)
