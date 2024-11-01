@@ -51,12 +51,6 @@ jobs:
 
           echo "writing /etc/lxc/lxc-usernet"
           echo "$u veth lxcbr0 100" | sudo tee -a /etc/lxc/lxc-usernet
-      - name: install skopeo
-        run: |
-          mkdir ~/bin
-          wget -O ~/bin/skopeo --progress=dot:mega https://github.com/project-machine/tools/releases/download/v0.0.1/skopeo
-          chmod 755 ~/bin/skopeo
-          sudo cp -f ~/bin/skopeo /usr/bin/skopeo
       - name: lint
         run: |
           make gofmt
@@ -71,15 +65,7 @@ jobs:
           cp ./bin/atomfs atomfs-${{ matrix.os }}
       - name: test
         run: |
-          export PATH=~/bin:$PATH
-          skopeo copy docker://zothub.io/machine/bootkit/bootkit:v0.0.16.230901-squashfs oci:oci:bootkit-squashfs
-          lxc-usernsexec -s << EOF
-          atomfs mount --persist=upper oci:bootkit-squashfs dest
-          [ -d dest/bootkit ]
-          touch dest/zz
-          atomfs umount dest
-          [ -f upper/zz ]
-          EOF
+          make batstest
       - name: Upload code coverage
         uses: codecov/codecov-action@v4
         with:

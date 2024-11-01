@@ -87,6 +87,7 @@ import (
 	"github.com/martinjungblut/go-cryptsetup"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
+
 	"machinerun.io/atomfs/mount"
 )
 
@@ -266,7 +267,7 @@ func uidmapIsHost(oneline string) bool {
 	return true
 }
 
-func amHostRoot() bool {
+func AmHostRoot() bool {
 	// if not uid 0, not host root
 	if os.Geteuid() != 0 {
 		return false
@@ -280,7 +281,7 @@ func amHostRoot() bool {
 }
 
 func Mount(squashfs, mountpoint, rootHash string) error {
-	if !amHostRoot() {
+	if !AmHostRoot() {
 		return GuestMount(squashfs, mountpoint)
 	}
 	err := HostMount(squashfs, mountpoint, rootHash)

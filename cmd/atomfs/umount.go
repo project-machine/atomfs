@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/urfave/cli"
+	"machinerun.io/atomfs"
 	"machinerun.io/atomfs/mount"
 )
 
@@ -15,6 +16,12 @@ var umountCmd = cli.Command{
 	Usage:     "unmount atomfs image",
 	ArgsUsage: "mountpoint",
 	Action:    doUmount,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "metadir",
+			Usage: "Directory to use for metadata. Use this if /run/atomfs is not writable for some reason.",
+		},
+	},
 }
 
 func umountUsage(me string) error {
@@ -43,36 +50,37 @@ func doUmount(ctx *cli.Context) error {
 		}
 	}
 
-	// We expect the argument to be the mountpoint - either a readonly
-	// bind mount, or a writeable overlay.
+	// We expect the argument to be the mountpoint of the overlay
 	err = syscall.Unmount(mountpoint, 0)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("Failed unmounting %s: %v", mountpoint, err))
 	}
 
-	// Now that we've unmounted the mountpoint, we expect the following
-	// under there:
-	// $mountpoint/meta/ro - the original readonly overlay mountpoint
-	// $mountpoint/meta/mounts/* - the original squashfs mounts
-	metadir := filepath.Join(mountpoint, "meta")
-	p := filepath.Join(metadir, "ro")
-	err = syscall.Unmount(p, 0)
+	// We expect the following in the metadir
+	//
+	// $metadir/mounts/* - the original squashfs mounts
+	// $metadir/meta/config.json
+
+	// TODO: want to know mountnsname for a target mountpoint... not for our current proc???
+	mountNSName, err := atomfs.GetMountNSName()
 	if err != nil {
-		errs = append(errs, fmt.Errorf("Failed unmounting RO mountpoint %s: %v", p, err))
+		errs = append(errs, fmt.Errorf("Failed to get mount namespace name"))
 	}
+	metadir := filepath.Join(atomfs.RuntimeDir(ctx.String("metadir")), "meta", mountNSName, atomfs.ReplacePathSeparators(mountpoint))
 
 	mountsdir := filepath.Join(metadir, "mounts")
 	mounts, err := os.ReadDir(mountsdir)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("Failed reading list of mounts: %v", err))
-		return fmt.Errorf("Encountered errors: %#v", errs)
+		return fmt.Errorf("Encountered errors: %v", errs)
 	}
 
 	for _, m := range mounts {
-		p = filepath.Join(mountsdir, m.Name())
+		p := filepath.Join(mountsdir, m.Name())
 		if !m.IsDir() || !isMountpoint(p) {
 			continue
 		}
+
 		err = syscall.Unmount(p, 0)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("Failed unmounting squashfs dir %s: %v", p, err))

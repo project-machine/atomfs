@@ -18,6 +18,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
+
 	"machinerun.io/atomfs/log"
 	"machinerun.io/atomfs/mount"
 )
@@ -499,7 +500,7 @@ func (k *KernelExtractor) Name() string {
 }
 
 func (k *KernelExtractor) IsAvailable() error {
-	if !amHostRoot() {
+	if !AmHostRoot() {
 		return errors.Errorf("not host root")
 	}
 	return nil

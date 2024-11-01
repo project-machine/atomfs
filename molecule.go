@@ -1,6 +1,7 @@
 package atomfs
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	ispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
+	"machinerun.io/atomfs/log"
 	"machinerun.io/atomfs/mount"
 	"machinerun.io/atomfs/squashfs"
 )
@@ -21,34 +23,67 @@ type Molecule struct {
 	config MountOCIOpts
 }
 
+func (m Molecule) MetadataPath() (string, error) {
+
+	mountNSName, err := GetMountNSName()
+	if err != nil {
+		return "", err
+	}
+	absTarget, err := filepath.Abs(m.config.Target)
+	if err != nil {
+		return "", err
+	}
+	metadir := filepath.Join(RuntimeDir(m.config.MetadataDir), "meta", mountNSName, ReplacePathSeparators(absTarget))
+	return metadir, nil
+}
+
+func (m Molecule) MountedAtomsPath(parts ...string) (string, error) {
+	metapath, err := m.MetadataPath()
+	if err != nil {
+		return "", err
+	}
+	mounts := path.Join(metapath, "mounts")
+	return path.Join(append([]string{mounts}, parts...)...), nil
+}
+
 // mountUnderlyingAtoms mounts all the underlying atoms at
-// config.MountedAtomsPath().
-func (m Molecule) mountUnderlyingAtoms() error {
+// MountedAtomsPath().
+// it returns a cleanup function that will tear down any atoms it successfully mounted.
+func (m Molecule) mountUnderlyingAtoms() (error, func()) {
 	// in the case that we have a verity or other mount error we need to
 	// tear down the other underlying atoms so we don't leave verity and loop
 	// devices around unused.
 	atomsMounted := []string{}
-	cleanupAtoms := func(err error) error {
+	cleanupAtoms := func() {
 		for _, target := range atomsMounted {
 			if umountErr := squashfs.Umount(target); umountErr != nil {
-				return errors.Wrapf(umountErr, "failed to unmount atom @ target %q while handling error: %s", target, err)
+				log.Warnf("cleanup: failed to unmount atom @ target %q: %s", target, umountErr)
 			}
 		}
-		return err
 	}
+	noop := func() {}
 
 	for _, a := range m.Atoms {
-		target := m.config.MountedAtomsPath(a.Digest.Encoded())
+		target, err := m.MountedAtomsPath(a.Digest.Encoded())
+		if err != nil {
+			return errors.Wrapf(err, "failed to find mounted atoms path for %+v", a), cleanupAtoms
+		}
 
 		rootHash := a.Annotations[squashfs.VerityRootHashAnnotation]
 
-		if !m.config.AllowMissingVerityData && rootHash == "" {
-			return errors.Errorf("%v is missing verity data", a.Digest)
+		if !m.config.AllowMissingVerityData {
+
+			if rootHash == "" {
+				return errors.Errorf("%v is missing verity data", a.Digest), cleanupAtoms
+			}
+			if !squashfs.AmHostRoot() {
+				return errors.Errorf("won't guestmount an image with verity data without --allow-missing-verity"), cleanupAtoms
+			}
 		}
 
 		mounts, err := mount.ParseMounts("/proc/self/mountinfo")
 		if err != nil {
-			return err
+			return err, cleanupAtoms
 		}
 
 		mountpoint, mounted := mounts.FindMount(target)
@@ -59,38 +94,40 @@ func (m Molecule) mountUnderlyingAtoms() error {
 					rootHash,
 					m.config.AllowMissingVerityData)
 				if err != nil {
-					return err
+					return err, cleanupAtoms
 				}
 				err = squashfs.ConfirmExistingVerityDeviceCurrentValidity(mountpoint.Source)
 				if err != nil {
-					return err
+					return err, cleanupAtoms
 				}
 			}
 			continue
 		}
 
 		if err := os.MkdirAll(target, 0755); err != nil {
-			return err
+			return err, cleanupAtoms
 		}
 
 		err = squashfs.Mount(m.config.AtomsPath(a.Digest.Encoded()), target, rootHash)
 		if err != nil {
-			return cleanupAtoms(err)
+			return err, cleanupAtoms
 		}
 
 		atomsMounted = append(atomsMounted, target)
 	}
 
-	return nil
+	return nil, noop
 }
 
-// overlayArgs - returns all of the mount options to pass to the kernel to
-// actually mount this molecule.
-// This function assumes read-only. It does not provide upperdir or workdir.
-func (m Molecule) overlayArgs(dest string) (string, error) {
+// overlayArgs - returns a colon-separated string of dirs to be used as mount
+// options to pass to the kernel to actually mount this molecule.
+func (m Molecule) overlayLowerDirs() (string, error) {
 	dirs := []string{}
 	for _, a := range m.Atoms {
-		target := m.config.MountedAtomsPath(a.Digest.Encoded())
+		target, err := m.MountedAtomsPath(a.Digest.Encoded())
+		if err != nil {
+			return "", err
+		}
 		dirs = append(dirs, target)
 	}
 
@@ -99,7 +136,10 @@ func (m Molecule) overlayArgs(dest string) (string, error) {
 	// We create an empty directory called "workaround" in the mounts
 	// directory, and add that to lowerdir list.
 	if len(dirs) == 1 {
-		workaround := m.config.MountedAtomsPath("workaround")
+		workaround, err := m.MountedAtomsPath("workaround")
+		if err != nil {
+			return "", err
+		}
 		if err := os.MkdirAll(workaround, 0755); err != nil {
 			return "", errors.Wrapf(err, "couldn't make workaround dir")
 		}
@@ -109,8 +149,8 @@ func (m Molecule) overlayArgs(dest string) (string, error) {
 
 	// Note that in overlayfs, the first thing is the top most layer in the
 	// overlay.
-	mntOpts := "index=off,xino=on,userxattr,lowerdir=" + strings.Join(dirs, ":")
-	return mntOpts, nil
+
+	return strings.Join(dirs, ":"), nil
 }
 
 // device mapper has no namespacing. if two different binaries invoke this code
@@ -119,14 +159,14 @@ func (m Molecule) overlayArgs(dest string) (string, error) {
 // device exists. so try to cooperate via this lock.
 var advisoryLockPath = path.Join(os.TempDir(), ".atomfs-lock")
 
-func makeLock(mountpoint string) (*os.File, error) {
+func makeLock(lockdir string) (*os.File, error) {
 	lockfile, err := os.Create(advisoryLockPath)
 	if err == nil {
 		return lockfile, nil
 	}
 	// backup plan: lock the destination as ${path}.atomfs-lock
-	mountpoint = strings.TrimSuffix(mountpoint, "/")
-	lockPath := filepath.Join(mountpoint, ".atomfs-lock")
+	lockdir = strings.TrimSuffix(lockdir, "/")
+	lockPath := filepath.Join(lockdir, ".atomfs-lock")
 	var err2 error
 	lockfile, err2 = os.Create(lockPath)
 	if err2 == nil {
@@ -137,8 +177,24 @@ func makeLock(mountpoint string) (*os.File, error) {
 	return lockfile, err
 }
 
+var OverlayMountOptions = "index=off,xino=on,userxattr"
+
+// Mount mounts an overlay at dest, with writeable overlay as per m.config
 func (m Molecule) Mount(dest string) error {
-	lockfile, err := makeLock(dest)
+
+	metadir, err := m.MetadataPath()
+	if err != nil {
+		return errors.Wrapf(err, "can't find metadata path")
+	}
+	if PathExists(metadir) {
+		return fmt.Errorf("%q exists: cowardly refusing to mess with it", metadir)
+	}
+
+	if err := EnsureDir(metadir); err != nil {
+		return err
+	}
+
+	lockfile, err := makeLock(metadir)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -149,25 +205,86 @@ func (m Molecule) Mount(dest string) error {
 		return errors.WithStack(err)
 	}
 
-	mntOpts, err := m.overlayArgs(dest)
+	overlayLowerDirs, err := m.overlayLowerDirs()
 	if err != nil {
 		return err
 	}
 
-	// The kernel doesn't allow mount options longer than 4096 chars, so
-	// let's give a nicer error than -EINVAL here.
-	if len(mntOpts) > 4096 {
+	complete := false
+
+	defer func() {
+		if !complete {
+			log.Errorf("Failure detected: cleaning up %q", metadir)
+			os.RemoveAll(metadir)
+		}
+	}()
+
+	err, cleanupUnderlyingAtoms := m.mountUnderlyingAtoms()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if !complete {
+			cleanupUnderlyingAtoms()
+		}
+	}()
+
+	err = m.config.WriteToFile(filepath.Join(metadir, "config.json"))
+	if err != nil {
+		return err
+	}
+
+	overlayArgs := ""
+	if m.config.AddWriteableOverlay {
+		rodest := filepath.Join(metadir, "ro")
+		if err = EnsureDir(rodest); err != nil {
+			return err
+		}
+
+		persistMetaPath := m.config.WriteableOverlayPath
+		if persistMetaPath == "" {
+			// no configured path, use metadir
+			persistMetaPath = metadir
+		}
+
+		workdir := filepath.Join(persistMetaPath, "work")
+		if err := EnsureDir(workdir); err != nil {
+			return errors.Wrapf(err, "failed to ensure workdir %q", workdir)
+		}
+
+		upperdir := filepath.Join(persistMetaPath, "persist")
+		if err := EnsureDir(upperdir); err != nil {
+			return errors.Wrapf(err, "failed to ensure upperdir %q", upperdir)
+		}
+
+		defer func() {
+			if !complete && m.config.WriteableOverlayPath == "" {
+				os.RemoveAll(m.config.WriteableOverlayPath)
+			}
+		}()
+
+		overlayArgs = fmt.Sprintf("lowerdir=%s:%s,upperdir=%s,workdir=%s,%s", dest, overlayLowerDirs, upperdir, workdir, OverlayMountOptions)
+
+	} else {
+		// for readonly, just mount the overlay directly onto dest
+		overlayArgs = fmt.Sprintf("lowerdir=%s,%s", overlayLowerDirs, OverlayMountOptions)
+
+	}
+
+	// The kernel doesn't allow mount options longer than 4096 chars
+	if len(overlayArgs) > 4096 {
 		return errors.Errorf("too many lower dirs; must have fewer than 4096 chars")
 	}
 
-	err = m.mountUnderlyingAtoms()
+	err = unix.Mount("overlay", dest, "overlay", 0, overlayArgs)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "couldn't do overlay mount to %s, opts: %s", dest, overlayArgs)
 	}
 
-	// now, do the actual overlay mount
-	err = unix.Mount("overlay", dest, "overlay", 0, mntOpts)
-	return errors.Wrapf(err, "couldn't do overlay mount to %s, opts: %s", dest, mntOpts)
+	// ensure deferred cleanups become noops:
+	complete = true
+	return nil
 }
 
 func Umount(dest string) error {
@@ -199,7 +316,7 @@ func Umount(dest string) error {
 			continue
 		}
 
-		if m.Target != dest {
+		if m.Target != dest { // TODO is this still right
 			continue
 		}
 

@@ -1,6 +1,8 @@
 package atomfs
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"path"
 
 	ispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -10,10 +12,12 @@ import (
 
 type MountOCIOpts struct {
 	OCIDir                 string
-	MetadataPath           string
 	Tag                    string
 	Target                 string
+	AddWriteableOverlay    bool
+	WriteableOverlayPath   string
 	AllowMissingVerityData bool
+	MetadataDir            string
 }
 
 func (c MountOCIOpts) AtomsPath(parts ...string) string {
@@ -21,9 +25,16 @@ func (c MountOCIOpts) AtomsPath(parts ...string) string {
 	return path.Join(append([]string{atoms}, parts...)...)
 }
 
-func (c MountOCIOpts) MountedAtomsPath(parts ...string) string {
-	mounts := path.Join(c.MetadataPath, "mounts")
-	return path.Join(append([]string{mounts}, parts...)...)
+func (c MountOCIOpts) WriteToFile(filename string) error {
+	b, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(filename, b, 0644)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func BuildMoleculeFromOCI(opts MountOCIOpts) (Molecule, error) {

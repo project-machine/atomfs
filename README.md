@@ -42,18 +42,19 @@ ab
 
 ## Implementation details
 
-We create $mountpoint/meta and pass that to `atomfs` as the
-Metadatapath.  We do the readonly `atomfs` molecule mount
-onto $metadir/ro.  Then if a readonly mount is requested
-$metadir/ro is bind mounted onto $metadir.  Otherwise, we create
-$metadir/work and $metadir/upper, and use these to do a rw
-overlay mount of $metadir/ro onto $mountpoint.
+The `atomfs` binary uses the `atomfs` package's Molecule API to mount oci
+images.
+
+Each squashfs layer is mounted separately at a subdir under
+`/run/atomfs/meta/$mountnsid/$mountpoint/`, and then an overlay mount is
+constructed for the specified mountpath. If specified in the config, a writeable
+upperdir is added to the overlay mount.
 
 Note that if you simply call `umount` on the mountpoint, then
 you will be left with all the individual squashfs mounts under
-`dest/mounts/*/`.
+`/run/atomfs/meta/$mountnsid/$mountpoint/`. Use `atomfs umount` instead.
 
 Note that you do need to be root in your namespace in order to
-do the final bind or overlay mount.  (We could get around this
+do the final overlay mount.  (We could get around this
 by using fuse-overlay, but creating a namespace seems overall
 tidy).

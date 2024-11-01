@@ -1,0 +1,14 @@
+test_base:
+  from:
+    type: scratch
+  imports:
+    - path: 1.README.md
+      dest: /
+
+test:
+  from:
+    type: built
+    tag: test_base
+  imports:
+    - path: random.txt
+      dest: /

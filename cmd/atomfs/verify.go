@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/urfave/cli"
+	"machinerun.io/atomfs"
+	"machinerun.io/atomfs/log"
 	"machinerun.io/atomfs/mount"
 	"machinerun.io/atomfs/squashfs"
 )
@@ -15,6 +17,12 @@ var verifyCmd = cli.Command{
 	Usage:     "check atomfs image for dm-verity errors",
 	ArgsUsage: "atomfs mountpoint",
 	Action:    doVerify,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "metadir",
+			Usage: "Directory to use for metadata. Use this if /run/atomfs is not writable for some reason.",
+		},
+	},
 }
 
 func verifyUsage(me string) error {
@@ -41,9 +49,13 @@ func doVerify(ctx *cli.Context) error {
 		return fmt.Errorf("%s is not a mountpoint", mountpoint)
 	}
 
-	// hidden by the final overlay mount, but visible in the mountinfo:
-	// $mountpoint/meta/mounts/* - the original squashfs mounts
-	mountsdir := filepath.Join(mountpoint, "meta", "mounts")
+	mountNSName, err := atomfs.GetMountNSName()
+	if err != nil {
+		return err
+	}
+
+	metadir := filepath.Join(atomfs.RuntimeDir(ctx.String("metadir")), "meta", mountNSName, atomfs.ReplacePathSeparators(mountpoint))
+	mountsdir := filepath.Join(metadir, "mounts")
 
 	mounts, err := mount.ParseMounts("/proc/self/mountinfo")
 	if err != nil {
@@ -58,16 +70,19 @@ func doVerify(ctx *cli.Context) error {
 	}
 
 	allOK := true
+	checkedCount := 0
 	for _, m := range mounts {
-
-		if m.FSType != "squashfs" {
-			continue
-		}
-
 		if !strings.HasPrefix(m.Target, mountsdir) {
 			continue
 		}
-
+		if m.FSType == "fuse.squashfuse_ll" {
+			log.Warnf("found squashfuse mount not supported by verify at %q", m.Source)
+			continue
+		}
+		if m.FSType != "squashfs" {
+			continue
+		}
+		checkedCount = checkedCount + 1
 		err = squashfs.ConfirmExistingVerityDeviceCurrentValidity(m.Source)
 		if err != nil {
 			fmt.Printf("%s: CORRUPTION FOUND\n", m.Source)
@@ -75,6 +90,12 @@ func doVerify(ctx *cli.Context) error {
 		} else {
 			fmt.Printf("%s: OK\n", m.Source)
 		}
+	}
+
+	// TODO - want to also be able to compare to expected # of mounts from
+	// molecule, need to write more molecule info during mol.mount
+	if checkedCount == 0 {
+		return fmt.Errorf("no applicable mounts found in %q", mountsdir)
 	}
 
 	if allOK {

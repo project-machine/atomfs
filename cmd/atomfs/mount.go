@@ -1,16 +1,15 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 
+	"github.com/pkg/errors"
 	"github.com/urfave/cli"
-	"golang.org/x/sys/unix"
+
 	"machinerun.io/atomfs"
 	"machinerun.io/atomfs/squashfs"
 )
@@ -22,12 +21,20 @@ var mountCmd = cli.Command{
 	Action:    doMount,
 	Flags: []cli.Flag{
 		cli.StringFlag{
-			Name:  "persist, upper, upperdir",
-			Usage: "Specify a directory to use as writeable overlay (implies --writeable)",
+			Name:  "persist",
+			Usage: "Specify a directory to use for the workdir and upperdir of a writeable overlay (implies --writeable)",
 		},
 		cli.BoolFlag{
 			Name:  "writeable, writable",
 			Usage: "Make the mount writeable using an overlay (ephemeral by default)",
+		},
+		cli.BoolFlag{
+			Name:  "allow-missing-verity",
+			Usage: "Mount even if the image has no verity data",
+		},
+		cli.StringFlag{
+			Name:  "metadir",
+			Usage: "Directory to use for metadata. Use this if /run/atomfs is not writable for some reason.",
 		},
 	},
 }
@@ -44,7 +51,7 @@ func findImage(ctx *cli.Context) (string, string, error) {
 	}
 	ocidir := r[0]
 	tag := r[1]
-	if !PathExists(ocidir) {
+	if !atomfs.PathExists(ocidir) {
 		return "", "", fmt.Errorf("oci directory %s does not exist: %w", ocidir, mountUsage(ctx.App.Name))
 	}
 	return ocidir, tag, nil
@@ -70,92 +77,44 @@ func doMount(ctx *cli.Context) error {
 		os.Exit(1)
 	}
 	target := ctx.Args()[1]
-	metadir := filepath.Join(target, "meta")
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return err
+	}
 
-	complete := false
+	absOCIDir, err := filepath.Abs(ocidir)
+	if err != nil {
+		return err
+	}
 
-	defer func() {
-		if !complete {
-			cleanupDest(metadir)
+	persistPath := ""
+	if ctx.IsSet("persist") {
+		persistPath = ctx.String("persist")
+		if persistPath == "" {
+			return fmt.Errorf("--persist requires an argument")
 		}
-	}()
-
-	if PathExists(metadir) {
-		return fmt.Errorf("%q exists: cowardly refusing to mess with it", metadir)
 	}
-
-	if err := EnsureDir(metadir); err != nil {
-		return err
-	}
-
-	rodest := filepath.Join(metadir, "ro")
-	if err = EnsureDir(rodest); err != nil {
-		return err
-	}
-
 	opts := atomfs.MountOCIOpts{
-		OCIDir:       ocidir,
-		MetadataPath: metadir,
-		Tag:          tag,
-		Target:       rodest,
+		OCIDir:                 absOCIDir,
+		Tag:                    tag,
+		Target:                 absTarget,
+		AddWriteableOverlay:    ctx.Bool("writeable") || ctx.IsSet("persist"),
+		WriteableOverlayPath:   persistPath,
+		AllowMissingVerityData: ctx.Bool("allow-missing-verity"),
+		MetadataDir:            ctx.String("metadir"), // nil here means /run/atomfs
 	}
 
 	mol, err := atomfs.BuildMoleculeFromOCI(opts)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "couldn't build molecule with opts %+v", opts)
 	}
 
-	err = mol.Mount(rodest)
+	err = mol.Mount(target)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "couldn't mount molecule at mntpt %q ", target)
 	}
 
-	if ctx.Bool("writeable") || ctx.IsSet("persist") {
-		err = overlay(target, rodest, metadir, ctx)
-	} else {
-		err = bind(target, rodest)
-	}
-
-	complete = err == nil
-	return err
-}
-
-func cleanupDest(metadir string) {
-	fmt.Printf("Failure detected: cleaning up %q", metadir)
-	rodest := filepath.Join(metadir, "ro")
-	if PathExists(rodest) {
-		if err := unix.Unmount(rodest, 0); err != nil {
-			fmt.Printf("Failed unmounting %q: %v", rodest, err)
-		}
-	}
-
-	mountsdir := filepath.Join(metadir, "mounts")
-	entries, err := os.ReadDir(mountsdir)
-	if err != nil {
-		fmt.Printf("Failed reading contents of %q: %v", mountsdir, err)
-		os.RemoveAll(metadir)
-		return
-	}
-
-	wd, err := os.Getwd()
-	if err != nil {
-		fmt.Printf("Failed getting working directory")
-		os.RemoveAll(metadir)
-	}
-	for _, e := range entries {
-		n := filepath.Base(e.Name())
-		if n == "workaround" {
-			continue
-		}
-		if strings.HasSuffix(n, ".log") {
-			continue
-		}
-		p := filepath.Join(wd, mountsdir, e.Name())
-		if err := squashUmount(p); err != nil {
-			fmt.Printf("Failed unmounting %q: %v\n", p, err)
-		}
-	}
-	os.RemoveAll(metadir)
+	return nil
 }
 
 func RunCommand(args ...string) error {
@@ -176,24 +135,4 @@ func squashUmount(p string) error {
 		return squashfs.Umount(p)
 	}
 	return RunCommand("fusermount", "-u", p)
-}
-
-func overlay(target, rodest, metadir string, ctx *cli.Context) error {
-	workdir := filepath.Join(metadir, "work")
-	if err := EnsureDir(workdir); err != nil {
-		return err
-	}
-	upperdir := filepath.Join(metadir, "persist")
-	if ctx.IsSet("persist") {
-		upperdir = ctx.String("persist")
-	}
-	if err := EnsureDir(upperdir); err != nil {
-		return err
-	}
-	overlayArgs := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s,index=off,userxattr", rodest, upperdir, workdir)
-	return unix.Mount("overlayfs", target, "overlay", 0, overlayArgs)
-}
-
-func bind(target, source string) error {
-	return syscall.Mount(source, target, "", syscall.MS_BIND, "")
 }
