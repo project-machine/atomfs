@@ -5,8 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/urfave/cli"
-	"machinerun.io/atomfs"
-	"machinerun.io/atomfs/mount"
+	"machinerun.io/atomfs/pkg/common"
 )
 
 var umountCmd = cli.Command{
@@ -24,11 +23,6 @@ var umountCmd = cli.Command{
 
 func umountUsage(me string) error {
 	return fmt.Errorf("Usage: %s umount mountpoint", me)
-}
-
-func isMountpoint(p string) bool {
-	mounted, err := mount.IsMountpoint(p)
-	return err == nil && mounted
 }
 
 func doUmount(ctx *cli.Context) error {

@@ -1,4 +1,4 @@
-package atomfs
+package common
 
 import (
 	"fmt"
