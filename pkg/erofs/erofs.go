@@ -79,13 +79,15 @@ func MakeErofs(tempdir string, rootfs string, eps *common.ExcludePaths, verity v
 
 	args := []string{tmpErofs.Name(), rootfs}
 	compression := LZ4HCCompression
-	zstdOk, parallelOk := mkerofsSupportsFeature()
-	if zstdOk {
-		args = append(args, "-z", "zstd")
-		compression = ZstdCompression
-	}
-	if parallelOk {
-		args = append(args, "--workers", fmt.Sprintf("%d", runtime.NumCPU()))
+	if false { // FIXME: following features are experimental, disabling for now
+		zstdOk, parallelOk := mkerofsSupportsFeature()
+		if zstdOk {
+			args = append(args, "-z", "zstd")
+			compression = ZstdCompression
+		}
+		if parallelOk {
+			args = append(args, "--workers", fmt.Sprintf("%d", runtime.NumCPU()))
+		}
 	}
 	if len(toExclude) != 0 {
 		args = append(args, "--exclude-path", excludesFile)
