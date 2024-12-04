@@ -1,4 +1,4 @@
-package atomfs
+package molecule
 
 import (
 	"fmt"
@@ -10,9 +10,11 @@ import (
 	ispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
-	"machinerun.io/atomfs/log"
-	"machinerun.io/atomfs/mount"
-	"machinerun.io/atomfs/squashfs"
+	"machinerun.io/atomfs/pkg/common"
+	"machinerun.io/atomfs/pkg/fs"
+	"machinerun.io/atomfs/pkg/log"
+	"machinerun.io/atomfs/pkg/mount"
+	"machinerun.io/atomfs/pkg/verity"
 )
 
 type Molecule struct {
@@ -25,7 +27,7 @@ type Molecule struct {
 
 func (m Molecule) MetadataPath() (string, error) {
 
-	mountNSName, err := GetMountNSName()
+	mountNSName, err := common.GetMountNSName()
 	if err != nil {
 		return "", err
 	}
@@ -33,7 +35,7 @@ func (m Molecule) MetadataPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	metadir := filepath.Join(RuntimeDir(m.config.MetadataDir), "meta", mountNSName, ReplacePathSeparators(absTarget))
+	metadir := filepath.Join(common.RuntimeDir(m.config.MetadataDir), "meta", mountNSName, common.ReplacePathSeparators(absTarget))
 	return metadir, nil
 }
 
@@ -56,7 +58,7 @@ func (m Molecule) mountUnderlyingAtoms() (error, func()) {
 	atomsMounted := []string{}
 	cleanupAtoms := func() {
 		for _, target := range atomsMounted {
-			if umountErr := squashfs.Umount(target); umountErr != nil {
+			if umountErr := common.Umount(target); umountErr != nil {
 				log.Warnf("cleanup: failed to unmount atom @ target %q: %s", target, umountErr)
 			}
 		}
@@ -69,14 +71,16 @@ func (m Molecule) mountUnderlyingAtoms() (error, func()) {
 			return errors.Wrapf(err, "failed to find mounted atoms path for %+v", a), cleanupAtoms
 		}
 
-		rootHash := a.Annotations[squashfs.VerityRootHashAnnotation]
+		fsi := fs.NewFromMediaType(a.MediaType)
+
+		rootHash := a.Annotations[verity.VerityRootHashAnnotation]
 
 		if !m.config.AllowMissingVerityData {
 
 			if rootHash == "" {
 				return errors.Errorf("%v is missing verity data", a.Digest), cleanupAtoms
 			}
-			if !squashfs.AmHostRoot() {
+			if !common.AmHostRoot() {
 				return errors.Errorf("won't guestmount an image with verity data without --allow-missing-verity"), cleanupAtoms
 			}
 		}
@@ -90,13 +94,13 @@ func (m Molecule) mountUnderlyingAtoms() (error, func()) {
 
 		if mounted {
 			if rootHash != "" {
-				err = squashfs.ConfirmExistingVerityDeviceHash(mountpoint.Source,
+				err = verity.ConfirmExistingVerityDeviceHash(mountpoint.Source,
 					rootHash,
 					m.config.AllowMissingVerityData)
 				if err != nil {
 					return err, cleanupAtoms
 				}
-				err = squashfs.ConfirmExistingVerityDeviceCurrentValidity(mountpoint.Source)
+				err = verity.ConfirmExistingVerityDeviceCurrentValidity(mountpoint.Source)
 				if err != nil {
 					return err, cleanupAtoms
 				}
@@ -108,7 +112,7 @@ func (m Molecule) mountUnderlyingAtoms() (error, func()) {
 			return err, cleanupAtoms
 		}
 
-		err = squashfs.Mount(m.config.AtomsPath(a.Digest.Encoded()), target, rootHash)
+		err = fsi.Mount(m.config.AtomsPath(a.Digest.Encoded()), target, rootHash)
 		if err != nil {
 			return err, cleanupAtoms
 		}
@@ -186,11 +190,11 @@ func (m Molecule) Mount(dest string) error {
 	if err != nil {
 		return errors.Wrapf(err, "can't find metadata path")
 	}
-	if PathExists(metadir) {
+	if common.PathExists(metadir) {
 		return fmt.Errorf("%q exists: cowardly refusing to mess with it", metadir)
 	}
 
-	if err := EnsureDir(metadir); err != nil {
+	if err := common.EnsureDir(metadir); err != nil {
 		return err
 	}
 
@@ -238,7 +242,7 @@ func (m Molecule) Mount(dest string) error {
 	overlayArgs := ""
 	if m.config.AddWriteableOverlay {
 		rodest := filepath.Join(metadir, "ro")
-		if err = EnsureDir(rodest); err != nil {
+		if err = common.EnsureDir(rodest); err != nil {
 			return err
 		}
 
@@ -249,12 +253,12 @@ func (m Molecule) Mount(dest string) error {
 		}
 
 		workdir := filepath.Join(persistMetaPath, "work")
-		if err := EnsureDir(workdir); err != nil {
+		if err := common.EnsureDir(workdir); err != nil {
 			return errors.Wrapf(err, "failed to ensure workdir %q", workdir)
 		}
 
 		upperdir := filepath.Join(persistMetaPath, "persist")
-		if err := EnsureDir(upperdir); err != nil {
+		if err := common.EnsureDir(upperdir); err != nil {
 			return errors.Wrapf(err, "failed to ensure upperdir %q", upperdir)
 		}
 
@@ -377,7 +381,7 @@ func Umount(dest string) error {
 			continue
 		}
 
-		err = squashfs.Umount(a)
+		err = common.Umount(a)
 		if err != nil {
 			return err
 		}

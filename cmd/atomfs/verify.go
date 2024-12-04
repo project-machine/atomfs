@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/urfave/cli"
-	"machinerun.io/atomfs"
-	"machinerun.io/atomfs/log"
-	"machinerun.io/atomfs/mount"
-	"machinerun.io/atomfs/squashfs"
+	"machinerun.io/atomfs/pkg/common"
+	"machinerun.io/atomfs/pkg/log"
+	"machinerun.io/atomfs/pkg/mount"
+	"machinerun.io/atomfs/pkg/verity"
 )
 
 var verifyCmd = cli.Command{
@@ -45,16 +45,16 @@ func doVerify(ctx *cli.Context) error {
 		}
 	}
 
-	if !isMountpoint(mountpoint) {
+	if !common.IsMountpoint(mountpoint) {
 		return fmt.Errorf("%s is not a mountpoint", mountpoint)
 	}
 
-	mountNSName, err := atomfs.GetMountNSName()
+	mountNSName, err := common.GetMountNSName()
 	if err != nil {
 		return err
 	}
 
-	metadir := filepath.Join(atomfs.RuntimeDir(ctx.String("metadir")), "meta", mountNSName, atomfs.ReplacePathSeparators(mountpoint))
+	metadir := filepath.Join(common.RuntimeDir(ctx.String("metadir")), "meta", mountNSName, common.ReplacePathSeparators(mountpoint))
 	mountsdir := filepath.Join(metadir, "mounts")
 
 	mounts, err := mount.ParseMounts("/proc/self/mountinfo")
@@ -83,7 +83,7 @@ func doVerify(ctx *cli.Context) error {
 			continue
 		}
 		checkedCount = checkedCount + 1
-		err = squashfs.ConfirmExistingVerityDeviceCurrentValidity(m.Source)
+		err = verity.ConfirmExistingVerityDeviceCurrentValidity(m.Source)
 		if err != nil {
 			fmt.Printf("%s: CORRUPTION FOUND\n", m.Source)
 			allOK = false

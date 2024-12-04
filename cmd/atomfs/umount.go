@@ -7,8 +7,7 @@ import (
 	"syscall"
 
 	"github.com/urfave/cli"
-	"machinerun.io/atomfs"
-	"machinerun.io/atomfs/mount"
+	"machinerun.io/atomfs/pkg/common"
 )
 
 var umountCmd = cli.Command{
@@ -26,11 +25,6 @@ var umountCmd = cli.Command{
 
 func umountUsage(me string) error {
 	return fmt.Errorf("Usage: %s umount mountpoint", me)
-}
-
-func isMountpoint(p string) bool {
-	mounted, err := mount.IsMountpoint(p)
-	return err == nil && mounted
 }
 
 func doUmount(ctx *cli.Context) error {
@@ -62,11 +56,11 @@ func doUmount(ctx *cli.Context) error {
 	// $metadir/meta/config.json
 
 	// TODO: want to know mountnsname for a target mountpoint... not for our current proc???
-	mountNSName, err := atomfs.GetMountNSName()
+	mountNSName, err := common.GetMountNSName()
 	if err != nil {
 		errs = append(errs, fmt.Errorf("Failed to get mount namespace name"))
 	}
-	metadir := filepath.Join(atomfs.RuntimeDir(ctx.String("metadir")), "meta", mountNSName, atomfs.ReplacePathSeparators(mountpoint))
+	metadir := filepath.Join(common.RuntimeDir(ctx.String("metadir")), "meta", mountNSName, common.ReplacePathSeparators(mountpoint))
 
 	mountsdir := filepath.Join(metadir, "mounts")
 	mounts, err := os.ReadDir(mountsdir)
@@ -77,7 +71,7 @@ func doUmount(ctx *cli.Context) error {
 
 	for _, m := range mounts {
 		p := filepath.Join(mountsdir, m.Name())
-		if !m.IsDir() || !isMountpoint(p) {
+		if !m.IsDir() || !common.IsMountpoint(p) {
 			continue
 		}
 

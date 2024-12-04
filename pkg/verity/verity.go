@@ -1,4 +1,4 @@
-package squashfs
+package verity
 
 // #cgo pkg-config: libcryptsetup devmapper --static
 // #include <libcryptsetup.h>
@@ -87,11 +87,9 @@ import (
 	"github.com/martinjungblut/go-cryptsetup"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
-
-	"machinerun.io/atomfs/mount"
 )
 
-const VerityRootHashAnnotation = "io.stackeroci.stacker.squashfs_verity_root_hash"
+const VerityRootHashAnnotation = "io.stackeroci.stacker.atomfs_verity_root_hash"
 
 type verityDeviceType struct {
 	Flags      uint
@@ -139,9 +137,9 @@ func isCryptsetupEINVAL(err error) bool {
 	return ok && cse.Code() == -22
 }
 
-var cryptsetupTooOld = errors.Errorf("libcryptsetup not new enough, need >= 2.3.0")
+var CryptsetupTooOld = errors.Errorf("libcryptsetup not new enough, need >= 2.3.0")
 
-func appendVerityData(file string) (string, error) {
+func AppendVerityData(file string) (string, error) {
 	fi, err := os.Lstat(file)
 	if err != nil {
 		return "", errors.WithStack(err)
@@ -149,7 +147,7 @@ func appendVerityData(file string) (string, error) {
 
 	verityOffset := fi.Size()
 
-	// we expect mksquashfs to have padded the file to the nearest 4k
+	// we expect make fs to have padded the file to the nearest 4k
 	// (dm-verity requires device block size, which is 512 for loopback,
 	// which is a multiple of 4k), let's check that here
 	if verityOffset%512 != 0 {
@@ -182,7 +180,7 @@ func appendVerityData(file string) (string, error) {
 	// render a special error message.
 	rootHash, _, err := verityDevice.VolumeKeyGet(cryptsetup.CRYPT_ANY_SLOT, "")
 	if isCryptsetupEINVAL(err) {
-		return "", cryptsetupTooOld
+		return "", CryptsetupTooOld
 	} else if err != nil {
 		return "", err
 	}
@@ -190,138 +188,27 @@ func appendVerityData(file string) (string, error) {
 	return fmt.Sprintf("%x", rootHash), errors.WithStack(err)
 }
 
-func verityDataLocation(sblock *superblock) (uint64, error) {
-	squashLen := sblock.size
-
-	// squashfs is padded out to the nearest 4k
-	if squashLen%4096 != 0 {
-		squashLen = squashLen + (4096 - squashLen%4096)
-	}
-
-	return squashLen, nil
-}
-
 func verityName(p string) string {
-	return fmt.Sprintf("%s-%s", p, veritySuffix)
+	return fmt.Sprintf("%s-%s", p, VeritySuffix)
 }
 
-func fileChanged(a os.FileInfo, path string) bool {
-	b, err := os.Lstat(path)
-	if err != nil {
-		return true
-	}
-	return !os.SameFile(a, b)
-}
-
-// Mount a filesystem as container root, without host root
-// privileges.  We do this using squashfuse.
-func GuestMount(squashFile string, mountpoint string) error {
-	if isMountpoint(mountpoint) {
-		return errors.Errorf("%s is already mounted", mountpoint)
-	}
-
-	abs, err := filepath.Abs(squashFile)
-	if err != nil {
-		return errors.Errorf("Failed to get absolute path for %s: %v", squashFile, err)
-	}
-	squashFile = abs
-
-	abs, err = filepath.Abs(mountpoint)
-	if err != nil {
-		return errors.Errorf("Failed to get absolute path for %s: %v", mountpoint, err)
-	}
-	mountpoint = abs
-
-	cmd, err := squashFuse(squashFile, mountpoint)
-	if err != nil {
-		return err
-	}
-	if err := cmd.Process.Release(); err != nil {
-		return errors.Errorf("Failed to release process after guestmount %s: %v", squashFile, err)
-	}
-	return nil
-}
-
-func isMountpoint(dest string) bool {
-	mounted, err := mount.IsMountpoint(dest)
-	return err == nil && mounted
-}
-
-// Takes /proc/self/uid_map contents as one string
-// Returns true if this is a uidmap representing the whole host
-// uid range.
-func uidmapIsHost(oneline string) bool {
-	oneline = strings.TrimSuffix(oneline, "\n")
-	if len(oneline) == 0 {
-		return false
-	}
-	lines := strings.Split(oneline, "\n")
-	if len(lines) != 1 {
-		return false
-	}
-	words := strings.Fields(lines[0])
-	if len(words) != 3 || words[0] != "0" || words[1] != "0" || words[2] != "4294967295" {
-		return false
-	}
-
-	return true
-}
-
-func AmHostRoot() bool {
-	// if not uid 0, not host root
-	if os.Geteuid() != 0 {
-		return false
-	}
-	// if uid_map doesn't map 0 to 0, not host root
-	bytes, err := os.ReadFile("/proc/self/uid_map")
-	if err != nil {
-		return false
-	}
-	return uidmapIsHost(string(bytes))
-}
-
-func Mount(squashfs, mountpoint, rootHash string) error {
-	if !AmHostRoot() {
-		return GuestMount(squashfs, mountpoint)
-	}
-	err := HostMount(squashfs, mountpoint, rootHash)
-	if err == nil || rootHash != "" {
-		return err
-	}
-	return GuestMount(squashfs, mountpoint)
-}
-
-func HostMount(squashfs string, mountpoint string, rootHash string) error {
-	fi, err := os.Stat(squashfs)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	sblock, err := readSuperblock(squashfs)
-	if err != nil {
-		return err
-	}
-
-	verityOffset, err := verityDataLocation(sblock)
-	if err != nil {
-		return err
-	}
-
-	if verityOffset == uint64(fi.Size()) && rootHash != "" {
+func VerityHostMount(fsImgFile string, fsType string, mountpoint string, rootHash string, veritySize int64, verityOffset uint64) error {
+	if verityOffset == uint64(veritySize) && rootHash != "" {
 		return errors.Errorf("asked for verity but no data present")
 	}
 
-	if rootHash == "" && verityOffset != uint64(fi.Size()) {
+	if rootHash == "" && verityOffset != uint64(veritySize) {
 		return errors.Errorf("verity data present but no root hash specified")
 	}
 
 	mountSourcePath := ""
 
 	var verityDevice *cryptsetup.Device
-	name := verityName(path.Base(squashfs))
+	name := verityName(path.Base(fsImgFile))
 
 	loopDevNeedsClosedOnErr := false
 	var loopDev losetup.Device
+	var err error
 
 	// set up the verity device if necessary
 	if rootHash != "" {
@@ -333,7 +220,7 @@ func HostMount(squashfs string, mountpoint string, rootHash string) error {
 				return errors.WithStack(err)
 			}
 
-			loopDev, err = losetup.Attach(squashfs, 0, true)
+			loopDev, err = losetup.Attach(fsImgFile, 0, true)
 			if err != nil {
 				return errors.WithStack(err)
 			}
@@ -392,7 +279,7 @@ func HostMount(squashfs string, mountpoint string, rootHash string) error {
 		}
 
 	} else {
-		loopDev, err = losetup.Attach(squashfs, 0, true)
+		loopDev, err = losetup.Attach(fsImgFile, 0, true)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -401,7 +288,7 @@ func HostMount(squashfs string, mountpoint string, rootHash string) error {
 
 	}
 
-	err = errors.WithStack(unix.Mount(mountSourcePath, mountpoint, "squashfs", unix.MS_RDONLY, ""))
+	err = errors.WithStack(unix.Mount(mountSourcePath, mountpoint, fsType, unix.MS_RDONLY, ""))
 	if err != nil {
 		if verityDevice != nil {
 			_ = verityDevice.Deactivate(name)
@@ -449,61 +336,33 @@ func findLoopBackingVerity(device string) (int64, error) {
 	return deviceNo, nil
 }
 
-func Umount(mountpoint string) error {
-	mounts, err := mount.ParseMounts("/proc/self/mountinfo")
+func VerityUnmount(mountPath string) error {
+	// find the loop device that backs the verity device
+	deviceNo, err := findLoopBackingVerity(mountPath)
 	if err != nil {
 		return err
 	}
 
-	// first, find the verity device that backs the mount
-	theMount, found := mounts.FindMount(mountpoint)
-	if !found {
-		return errors.Errorf("%s is not a mountpoint", mountpoint)
-	}
-
-	err = unix.Unmount(mountpoint, 0)
+	loopDev := losetup.New(uint64(deviceNo), 0)
+	// here, we don't have the loopback device any more (we detached it
+	// above). the cryptsetup API allows us to pass NULL for the crypt
+	// device, but go-cryptsetup doesn't have a way to initialize a NULL
+	// crypt device short of making the struct by hand like this.
+	err = (&cryptsetup.Device{}).Deactivate(mountPath)
 	if err != nil {
-		return errors.Wrapf(err, "failed unmounting %v", mountpoint)
-	}
-
-	if _, err := os.Stat(theMount.Source); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
 		return errors.WithStack(err)
 	}
 
-	// was this a verity mount or a regular loopback mount? (if it's a
-	// regular loopback mount, we detached it above, so need to do anything
-	// special here; verity doesn't play as nicely)
-	if strings.HasSuffix(theMount.Source, veritySuffix) {
-		// find the loop device that backs the verity device
-		deviceNo, err := findLoopBackingVerity(theMount.Source)
-		if err != nil {
-			return err
-		}
-
-		loopDev := losetup.New(uint64(deviceNo), 0)
-		// here, we don't have the loopback device any more (we detached it
-		// above). the cryptsetup API allows us to pass NULL for the crypt
-		// device, but go-cryptsetup doesn't have a way to initialize a NULL
-		// crypt device short of making the struct by hand like this.
-		err = (&cryptsetup.Device{}).Deactivate(theMount.Source)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		// finally, kill the loop dev
-		err = loopDev.Detach()
-		if err != nil {
-			return errors.Wrapf(err, "failed to detach loop dev for %v", theMount.Source)
-		}
+	// finally, kill the loop dev
+	err = loopDev.Detach()
+	if err != nil {
+		return errors.Wrapf(err, "failed to detach loop dev for %v", mountPath)
 	}
 
 	return nil
 }
 
-// If we are using squashfuse, then we will be unable to get verity has from
+// If we are using fuse, then we will be unable to get verity has from
 // the mount device.  This is not a safe thing, we we only allow it when the
 // device was mounted originally with AllowMissingVerityData.
 

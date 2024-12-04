@@ -1,4 +1,4 @@
-package atomfs
+package molecule
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 
 	ispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/umoci"
-	stackeroci "machinerun.io/atomfs/oci"
+	stackeroci "machinerun.io/atomfs/pkg/oci"
 )
 
 type MountOCIOpts struct {
