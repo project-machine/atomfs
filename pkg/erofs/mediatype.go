@@ -3,8 +3,6 @@ package erofs
 import (
 	"fmt"
 	"strings"
-
-	vrty "machinerun.io/atomfs/pkg/verity"
 )
 
 type ErofsCompression string
@@ -21,10 +19,6 @@ func IsErofsMediaType(mediaType string) bool {
 	return strings.HasPrefix(mediaType, BaseMediaTypeLayerErofs)
 }
 
-func GenerateErofsMediaType(comp ErofsCompression, verity vrty.VerityMetadata) string {
-	verityString := ""
-	if verity {
-		verityString = fmt.Sprintf("+%s", vrty.VeritySuffix)
-	}
-	return fmt.Sprintf("%s+%s%s", BaseMediaTypeLayerErofs, comp, verityString)
+func GenerateErofsMediaType(comp ErofsCompression) string {
+	return fmt.Sprintf("%s+%s", BaseMediaTypeLayerErofs, comp)
 }

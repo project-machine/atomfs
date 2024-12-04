@@ -3,8 +3,6 @@ package squashfs
 import (
 	"fmt"
 	"strings"
-
-	vrty "machinerun.io/atomfs/pkg/verity"
 )
 
 type SquashfsCompression string
@@ -20,10 +18,6 @@ func IsSquashfsMediaType(mediaType string) bool {
 	return strings.HasPrefix(mediaType, BaseMediaTypeLayerSquashfs)
 }
 
-func GenerateSquashfsMediaType(comp SquashfsCompression, verity vrty.VerityMetadata) string {
-	verityString := ""
-	if verity {
-		verityString = fmt.Sprintf("+%s", vrty.VeritySuffix)
-	}
-	return fmt.Sprintf("%s+%s%s", BaseMediaTypeLayerSquashfs, comp, verityString)
+func GenerateSquashfsMediaType(comp SquashfsCompression) string {
+	return fmt.Sprintf("%s+%s", BaseMediaTypeLayerSquashfs, comp)
 }

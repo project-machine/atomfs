@@ -111,7 +111,7 @@ func MakeErofs(tempdir string, rootfs string, eps *common.ExcludePaths, verity v
 		return nil, "", rootHash, errors.WithStack(err)
 	}
 
-	return blob, GenerateErofsMediaType(compression, verity), rootHash, nil
+	return blob, GenerateErofsMediaType(compression), rootHash, nil
 }
 
 func findErofsFuseInfo() {

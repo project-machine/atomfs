@@ -105,7 +105,7 @@ func MakeSquashfs(tempdir string, rootfs string, eps *common.ExcludePaths, verit
 		return nil, "", rootHash, errors.WithStack(err)
 	}
 
-	return blob, GenerateSquashfsMediaType(compression, verity), rootHash, nil
+	return blob, GenerateSquashfsMediaType(compression), rootHash, nil
 }
 
 func findSquashFuseInfo() {
