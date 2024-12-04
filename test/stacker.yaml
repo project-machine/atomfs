@@ -1,0 +1,22 @@
+base:
+  from:
+    type: oci
+    url: /tmp/oci/busybox:1.37-glibc
+  run: |
+    touch /base
+    truncate -s 10M /test.model
+a:
+  from:
+    type: built
+    tag: base
+  run: touch /a
+b:
+  from:
+    type: built
+    tag: base
+  run: touch /b
+c:
+  from:
+    type: built
+    tag: base
+  run: touch /c
