@@ -46,9 +46,16 @@ $(BATS):
 	git clone --depth 1 https://github.com/bats-core/bats-assert $(ROOT)/test/test_helper/bats-assert
 	git clone --depth 1 https://github.com/bats-core/bats-file $(ROOT)/test/test_helper/bats-file
 
-batstest: $(BATS) $(STACKER) atomfs test/random.txt
+batstest: $(BATS) $(STACKER) atomfs test/random.txt testimages
 	cd $(ROOT)/test; sudo $(BATS) --tap --timing priv-*.bats
 	cd $(ROOT)/test; $(BATS) --tap --timing unpriv-*.bats
+
+testimages: /tmp/atomfs-test-oci/.copydone
+	@echo "busybox image exists at /tmp/atomfs-test-oci already"
+
+/tmp/atomfs-test-oci/.copydone:
+	skopeo copy docker://public.ecr.aws/docker/library/busybox:stable oci:/tmp/atomfs-test-oci:busybox
+	touch $@
 
 test/random.txt:
 	dd if=/dev/random of=/dev/stdout count=2048 | base64 > test/random.txt

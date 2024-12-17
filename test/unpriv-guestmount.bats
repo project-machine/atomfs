@@ -31,6 +31,7 @@ function setup() {
       echo guestmount without allow-missing should fail, because we do not have verity
       exit 1
     }
+    echo "XFAIL: guestmount without allow-missing did fail"
     set -e
 
     atomfs --debug mount --allow-missing-verity --persist=\$PERSIST_DIR ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
@@ -44,6 +45,7 @@ function setup() {
        echo mount with squashfuse ignores verity, so verify should have failed, output should include warning
        exit 1
     }
+    echo "XFAIL: verify did fail on squashfuse mounted molecule"
     set -e
 
     find $ATOMFS_TEST_RUN_DIR/meta/\$INNER_MNTNSNAME/ -name config.json|xargs cat
