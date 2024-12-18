@@ -26,7 +26,7 @@ function setup_file() {
     assert_failure
 
     mkdir -p mountpoint
-    run atomfs --debug mount ${BATS_TEST_TMPDIR}/oci:test-squashfs mountpoint
+    run atomfs-cover --debug mount ${BATS_TEST_TMPDIR}/oci:test-squashfs mountpoint
     assert_failure
 
 }

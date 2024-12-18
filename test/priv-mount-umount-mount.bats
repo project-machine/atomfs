@@ -37,18 +37,18 @@ function verity_checkusedloops() {
 
     echo MOUNT A
     mkdir -p $MP/a
-    run atomfs --debug mount ${BATS_SUITE_TMPDIR}/oci:a-squashfs $MP/a
+    run atomfs-cover --debug mount ${BATS_SUITE_TMPDIR}/oci:a-squashfs $MP/a
     assert_success
     assert_file_exists $MP/a/a
 
     echo MOUNT B
     mkdir -p $MP/b
-    run atomfs --debug mount ${BATS_SUITE_TMPDIR}/oci:b-squashfs $MP/b
+    run atomfs-cover --debug mount ${BATS_SUITE_TMPDIR}/oci:b-squashfs $MP/b
     assert_success
     assert_file_exists $MP/b/b
 
     echo UMOUNT B
-    atomfs --debug umount $MP/b
+    atomfs-cover --debug umount $MP/b
     assert_success
 
     # first layer should still exist since a is still mounted
@@ -58,12 +58,12 @@ function verity_checkusedloops() {
 
     echo MOUNT C
     mkdir -p $MP/c
-    atomfs --debug mount ${BATS_SUITE_TMPDIR}/oci:c-squashfs $MP/c
+    atomfs-cover --debug mount ${BATS_SUITE_TMPDIR}/oci:c-squashfs $MP/c
     assert_success
     assert_file_exists $MP/c/c
 
     echo UMOUNT A
-    atomfs --debug umount $MP/a
+    atomfs-cover --debug umount $MP/a
     assert_success
 
     # first layer should still exist since c is still mounted
@@ -75,7 +75,7 @@ function verity_checkusedloops() {
     assert_file_exists $MP/c/c
     assert_file_exists $MP/c/bin/sh
 
-    atomfs --debug umount $MP/c
+    atomfs-cover --debug umount $MP/c
     assert_success
 
     # c's last layer shouldn't exist any more, since it is unique
