@@ -449,25 +449,42 @@ func findLoopBackingVerity(device string) (int64, error) {
 	return deviceNo, nil
 }
 
+// unmounts a squash mountpoint and detaches any verity / loop devices that back
+// it. Only use this if you are sure the underlying devices aren't in use by
+// other mount points.
 func Umount(mountpoint string) error {
-	mounts, err := mount.ParseMounts("/proc/self/mountinfo")
-	if err != nil {
-		return err
-	}
-
-	// first, find the verity device that backs the mount
-	theMount, found := mounts.FindMount(mountpoint)
-	if !found {
-		return errors.Errorf("%s is not a mountpoint", mountpoint)
-	}
+	devPath, err := GetBackingDevice(mountpoint)
 
 	err = unix.Unmount(mountpoint, 0)
 	if err != nil {
 		return errors.Wrapf(err, "failed unmounting %v", mountpoint)
 	}
 
-	if _, err := os.Stat(theMount.Source); err != nil {
+	return MaybeCleanupBackingDevice(devPath)
+}
+
+func GetBackingDevice(mountpoint string) (string, error) {
+	mounts, err := mount.ParseMounts("/proc/self/mountinfo")
+	if err != nil {
+		return "", err
+	}
+
+	theMount, found := mounts.FindMount(mountpoint)
+	if !found {
+		return "", errors.Errorf("%s is not a mountpoint", mountpoint)
+	}
+	return theMount.Source, nil
+}
+
+// given a device path that had been used as the backing device for a squash
+// mountpoint, cleans up and detaches verity device if it still exists.
+//
+// If the device path does not exist, that is OK - this happens if the device
+// was a regular loopback and not -verity.
+func MaybeCleanupBackingDevice(devPath string) error {
+	if _, err := os.Stat(devPath); err != nil {
 		if os.IsNotExist(err) {
+			// It's been detached, this is fine.
 			return nil
 		}
 		return errors.WithStack(err)
@@ -476,9 +493,9 @@ func Umount(mountpoint string) error {
 	// was this a verity mount or a regular loopback mount? (if it's a
 	// regular loopback mount, we detached it above, so need to do anything
 	// special here; verity doesn't play as nicely)
-	if strings.HasSuffix(theMount.Source, veritySuffix) {
+	if strings.HasSuffix(devPath, veritySuffix) {
 		// find the loop device that backs the verity device
-		deviceNo, err := findLoopBackingVerity(theMount.Source)
+		deviceNo, err := findLoopBackingVerity(devPath)
 		if err != nil {
 			return err
 		}
@@ -488,7 +505,7 @@ func Umount(mountpoint string) error {
 		// above). the cryptsetup API allows us to pass NULL for the crypt
 		// device, but go-cryptsetup doesn't have a way to initialize a NULL
 		// crypt device short of making the struct by hand like this.
-		err = (&cryptsetup.Device{}).Deactivate(theMount.Source)
+		err = (&cryptsetup.Device{}).Deactivate(devPath)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -496,9 +513,13 @@ func Umount(mountpoint string) error {
 		// finally, kill the loop dev
 		err = loopDev.Detach()
 		if err != nil {
-			return errors.Wrapf(err, "failed to detach loop dev for %v", theMount.Source)
+			return errors.Wrapf(err, "failed to detach loop dev for %v", devPath)
 		}
 	}
+
+	// NOTE: because of lazy device destruction, it is possible for a non-verity
+	// backing loop dev to be auto-detached but still exist. There's nothing for
+	// us to do in that case, so we return nil.
 
 	return nil
 }

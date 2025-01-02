@@ -26,30 +26,32 @@ function setup() {
     export INNER_MNTNSNAME=\$(readlink /proc/self/ns/mnt | cut -c 6-15)
 
     set +e
-    atomfs --debug mount --persist=\$PERSIST_DIR ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
+    atomfs-cover --debug mount --persist=\$PERSIST_DIR ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
     [ \$? -eq 0 ] && {
       echo guestmount without allow-missing should fail, because we do not have verity
       exit 1
     }
+    echo "XFAIL: guestmount without allow-missing did fail"
     set -e
 
-    atomfs --debug mount --allow-missing-verity --persist=\$PERSIST_DIR ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
+    atomfs-cover --debug mount --allow-missing-verity --persist=\$PERSIST_DIR ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
     [ -f $MP/1.README.md ]
     [ -f $MP/random.txt ]
     touch $MP/let-me-write
 
     set +e
-    atomfs --debug verify $MP
+    atomfs-cover --debug verify $MP
     [ \$? -eq 0 ] && {
        echo mount with squashfuse ignores verity, so verify should have failed, output should include warning
        exit 1
     }
+    echo "XFAIL: verify did fail on squashfuse mounted molecule"
     set -e
 
     find $ATOMFS_TEST_RUN_DIR/meta/\$INNER_MNTNSNAME/ -name config.json|xargs cat
     find $ATOMFS_TEST_RUN_DIR/meta/\$INNER_MNTNSNAME/
 
-    atomfs --debug umount $MP
+    atomfs-cover --debug umount $MP
     [ -f \$PERSIST_DIR/persist/let-me-write ]
 
     # mount point and meta dir should be empty
@@ -74,20 +76,20 @@ EOF
 
     export INNER_MNTNSNAME=\$(readlink /proc/self/ns/mnt | cut -c 6-15)
 
-    atomfs --debug mount --allow-missing-verity --persist=\$PERSIST_DIR ${BATS_SUITE_TMPDIR}/oci-no-verity:test-squashfs $MP
+    atomfs-cover --debug mount --allow-missing-verity --persist=\$PERSIST_DIR ${BATS_SUITE_TMPDIR}/oci-no-verity:test-squashfs $MP
     [ -f $MP/1.README.md ]
     [ -f $MP/random.txt ]
     touch $MP/let-me-write
 
     set +e
-    atomfs --debug verify $MP
+    atomfs-cover --debug verify $MP
     [ \$? -eq 0 ] && {
        echo mount with squashfuse ignores verity, so verify should have failed, output should include warning
        exit 1
     }
     set -e
 
-    atomfs --debug umount $MP
+    atomfs-cover --debug umount $MP
     [ -f \$PERSIST_DIR/persist/let-me-write ]
 
     [ -d $MP ]
@@ -112,11 +114,11 @@ EOF
 
     export INNER_MNTNSNAME=\$(readlink /proc/self/ns/mnt | cut -c 6-15)
 
-    atomfs --debug mount --allow-missing-verity --metadir=\$META_DIR ${BATS_SUITE_TMPDIR}/oci-no-verity:test-squashfs $MP
+    atomfs-cover --debug mount --allow-missing-verity --metadir=\$META_DIR ${BATS_SUITE_TMPDIR}/oci-no-verity:test-squashfs $MP
     [ -f $MP/1.README.md ]
     [ -f $MP/random.txt ]
 
-    atomfs --debug umount --metadir=\$META_DIR $MP
+    atomfs-cover --debug umount --metadir=\$META_DIR $MP
 
     [ -d $MP ]
     [ -z \$( ls -A $MP) ]

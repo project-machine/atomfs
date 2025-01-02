@@ -14,6 +14,7 @@ BATS_VERSION := v1.10.0
 STACKER = $(TOOLS_D)/bin/stacker
 STACKER_VERSION := v1.0.0
 TOOLS_D := $(ROOT)/tools
+GOCOVERDIR ?= $(ROOT)
 
 export PATH := $(TOOLS_D)/bin:$(PATH)
 
@@ -25,11 +26,13 @@ gofmt: .made-gofmt
 		{ echo "gofmt made changes: $$o" 1>&2; exit 1; }
 	@touch $@
 
-atomfs: .made-gofmt $(GO_SRC)
-	cd $(ROOT)/cmd/atomfs && go build -buildvcs=false -ldflags "$(VERSION_LDFLAGS)" -o $(ROOT)/bin/atomfs ./...
+atomfs atomfs-cover: .made-gofmt $(GO_SRC)
+	cd $(ROOT)/cmd/atomfs && go build $(BUILDCOVERFLAGS) -buildvcs=false -ldflags "$(VERSION_LDFLAGS)" -o $(ROOT)/bin/$@ ./...
+
+atomfs-cover: BUILDCOVERFLAGS=-cover
 
 gotest: $(GO_SRC)
-	go test -coverprofile=coverage.txt -ldflags "$(VERSION_LDFLAGS)"  ./...
+	go test -coverprofile=unit-coverage.txt -ldflags "$(VERSION_LDFLAGS)"  ./...
 
 $(STACKER):
 	mkdir -p $(TOOLS_D)/bin
@@ -46,9 +49,21 @@ $(BATS):
 	git clone --depth 1 https://github.com/bats-core/bats-assert $(ROOT)/test/test_helper/bats-assert
 	git clone --depth 1 https://github.com/bats-core/bats-file $(ROOT)/test/test_helper/bats-file
 
-batstest: $(BATS) $(STACKER) atomfs test/random.txt
-	cd $(ROOT)/test; sudo $(BATS) --tap --timing priv-*.bats
-	cd $(ROOT)/test; $(BATS) --tap --timing unpriv-*.bats
+batstest: $(BATS) $(STACKER) atomfs-cover test/random.txt testimages
+	cd $(ROOT)/test; sudo GOCOVERDIR=$(GOCOVERDIR) $(BATS) --tap --timing priv-*.bats
+	cd $(ROOT)/test; GOCOVERDIR=$(GOCOVERDIR) $(BATS) --tap --timing unpriv-*.bats
+	go tool covdata textfmt -i $(GOCOVERDIR) -o integ-coverage.txt
+
+covreport: gotest batstest
+	go tool cover -func=unit-coverage.txt
+	go tool cover -func=integ-coverage.txt
+
+testimages: /tmp/atomfs-test-oci/.copydone
+	@echo "busybox image exists at /tmp/atomfs-test-oci already"
+
+/tmp/atomfs-test-oci/.copydone:
+	skopeo copy docker://public.ecr.aws/docker/library/busybox:stable oci:/tmp/atomfs-test-oci:busybox
+	touch $@
 
 test/random.txt:
 	dd if=/dev/random of=/dev/stdout count=2048 | base64 > test/random.txt
