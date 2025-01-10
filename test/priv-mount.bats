@@ -17,7 +17,7 @@ function setup() {
 }
 
 @test "RO mount/umount and verify of good image works" {
-    run atomfs --debug mount ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
+    run atomfs-cover --debug mount ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
     assert_success
     assert_file_exists $MP/1.README.md
     assert_file_exists $MP/random.txt
@@ -26,10 +26,10 @@ function setup() {
     run touch $MP/do-not-let-me
     assert_failure
 
-    run atomfs verify $MP
+    run atomfs-cover verify $MP
     assert_success
 
-    run atomfs --debug umount $MP
+    run atomfs-cover --debug umount $MP
     assert_success
 
     # mount point and meta dir should exist but be empty:
@@ -41,7 +41,7 @@ function setup() {
 }
 
 @test "mount with missing verity data fails" {
-    run atomfs --debug mount ${BATS_SUITE_TMPDIR}/oci-no-verity:test-squashfs $MP
+    run atomfs-cover --debug mount ${BATS_SUITE_TMPDIR}/oci-no-verity:test-squashfs $MP
     assert_failure
     assert_line --partial "is missing verity data"
 
@@ -54,10 +54,10 @@ function setup() {
 }
 
 @test "mount with missing verity data passes if you ignore it" {
-    run atomfs --debug mount --allow-missing-verity ${BATS_SUITE_TMPDIR}/oci-no-verity:test-squashfs $MP
+    run atomfs-cover --debug mount --allow-missing-verity ${BATS_SUITE_TMPDIR}/oci-no-verity:test-squashfs $MP
     assert_success
 
-    run atomfs --debug umount $MP
+    run atomfs-cover --debug umount $MP
     assert_success
 
     # mount point and meta dir should exist but be empty:
@@ -69,7 +69,7 @@ function setup() {
 }
 
 @test "mount/umount with writeable overlay" {
-    run atomfs --debug mount --writeable ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
+    run atomfs-cover --debug mount --writeable ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
     assert_success
     assert_file_exists $MP/1.README.md
     assert_file_exists $MP/random.txt
@@ -81,7 +81,7 @@ function setup() {
     run cp $MP/1.README.md $MP/3.README.md
     assert_success
 
-    run atomfs --debug umount $MP
+    run atomfs-cover --debug umount $MP
     assert_success
 
     # mount point and meta dir should exist but be empty:
@@ -94,7 +94,7 @@ function setup() {
 @test "mount with writeable overlay in separate dir" {
     export PERSIST_DIR=${BATS_TEST_TMPDIR}/persist-dir
     mkdir -p $PERSIST_DIR
-    run atomfs --debug mount --persist=${PERSIST_DIR} ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
+    run atomfs-cover --debug mount --persist=${PERSIST_DIR} ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
     assert_success
     assert_file_exists $MP/1.README.md
     assert_file_exists $MP/random.txt
@@ -108,7 +108,7 @@ function setup() {
     assert_file_exists $PERSIST_DIR/persist/3.README.md
     assert_file_not_exists $PERSIST_DIR/persist/1.README.md
 
-    run atomfs --debug umount $MP
+    run atomfs-cover --debug umount $MP
     assert_success
     # mount point and meta dir should exist but be empty:
     assert_dir_exists $MP

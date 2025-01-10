@@ -287,14 +287,32 @@ func (m Molecule) Mount(dest string) error {
 	return nil
 }
 
+// Default Umount passes "" and uses /run/atomfs metadir, see RuntimeDir().
 func Umount(dest string) error {
+	return UmountWithMetadir(dest, "")
+}
+
+func UmountWithMetadir(dest, metadirArg string) error {
 	var err error
 	dest, err = filepath.Abs(dest)
 	if err != nil {
 		return errors.Wrapf(err, "couldn't create abs path for %v", dest)
 	}
 
-	lockfile, err := makeLock(dest)
+	// recreate molecule config as much as possible, for MetadataPath():
+	mol := Molecule{
+		config: MountOCIOpts{
+			Target:      dest,
+			MetadataDir: metadirArg,
+		},
+	}
+
+	metadir, err := mol.MetadataPath()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	lockfile, err := makeLock(metadir)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -310,77 +328,93 @@ func Umount(dest string) error {
 		return err
 	}
 
-	underlyingAtoms := []string{}
+	// Find all mountpoints underlying the current top Overlay MP
+	underlyingAtomRelPaths := []string{}
 	for _, m := range mounts {
 		if m.FSType != "overlay" {
 			continue
 		}
 
-		if m.Target != dest { // TODO is this still right
+		if m.Target != dest {
 			continue
 		}
 
-		underlyingAtoms, err = m.GetOverlayDirs()
+		underlyingAtomRelPaths, err = m.GetOverlayDirs()
 		if err != nil {
 			return err
 		}
 		break
 	}
 
+	underlyingAtoms := []string{}
+	// Ensure abs paths, as we compare it to the abs path of dest
+	for _, m := range underlyingAtomRelPaths {
+		abspath, err := filepath.Abs(m)
+		if err != nil {
+			return errors.Wrapf(err, "failed to get abs path for %q", m)
+		}
+		underlyingAtoms = append(underlyingAtoms, abspath)
+	}
+
 	if len(underlyingAtoms) == 0 {
 		return errors.Errorf("%s is not an atomfs mountpoint", dest)
 	}
 
+	// Unmount the top Overlay MP
 	if err := unix.Unmount(dest, 0); err != nil {
-		return err
+		return errors.Wrapf(err, "failed to unmount dest, %q", dest)
 	}
 
-	// now, "refcount" the remaining atoms and see if any of ours are
-	// unused
-	usedAtoms := map[string]int{}
-
-	mounts, err = mount.ParseMounts("/proc/self/mountinfo")
-	if err != nil {
-		return err
-	}
-
-	for _, m := range mounts {
-		if m.FSType != "overlay" {
-			continue
-		}
-
-		dirs, err := m.GetOverlayDirs()
-		if err != nil {
-			return err
-		}
-		for _, d := range dirs {
-			usedAtoms[d]++
-		}
-	}
-
-	// If any of the atoms underlying the target mountpoint are now unused,
-	// let's unmount them too.
+	// For each underlying dir, we need to find the corresponding
+	// squashfs-verity device mounted on it, then unconditionally unmount the
+	// underlying dir (because its mount point is specific to `dest`) - then
+	// find the underlying device and optionally clean it up too
 	for _, a := range underlyingAtoms {
-		_, used := usedAtoms[a]
-		if used {
-			continue
-		}
-		/* TODO: some kind of logging
-		if !used {
-			log.Warnf("unused atom %s was part of this molecule?")
-			continue
-		}
-		*/
-
 		// the workaround dir isn't really a mountpoint, so don't unmount it
 		if path.Base(a) == "workaround" {
 			continue
 		}
 
-		err = squashfs.Umount(a)
+		// overlaydirs includes the top level mount, ignore it
+		if a == dest {
+			continue
+		}
+
+		backingDevice, err := squashfs.GetBackingDevice(a)
 		if err != nil {
 			return err
 		}
+		log.Debugf("Unmounting underlying atom =%q", a)
+		if err := unix.Unmount(a, 0); err != nil {
+			return err
+		}
+
+		// if that was the last mountpoint for the dev, we can clean it up too
+		mounts, err = mount.ParseMounts("/proc/self/mountinfo")
+		if err != nil {
+			return err
+		}
+		backingDevIsUsed := false
+		for _, m := range mounts {
+			if m.Source == backingDevice {
+				backingDevIsUsed = true
+			}
+		}
+
+		if !backingDevIsUsed {
+			if err := squashfs.MaybeCleanupBackingDevice(backingDevice); err != nil {
+				return err
+			}
+		}
+	}
+
+	mountNSName, err := GetMountNSName()
+	if err != nil {
+		return err
+	}
+	destMetaDir := filepath.Join(RuntimeDir(metadir), "meta", mountNSName, ReplacePathSeparators(dest))
+	if err := os.RemoveAll(destMetaDir); err != nil {
+		return err
 	}
 
 	return nil
