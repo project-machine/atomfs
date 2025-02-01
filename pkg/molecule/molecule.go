@@ -71,8 +71,6 @@ func (m Molecule) mountUnderlyingAtoms() (error, func()) {
 			return errors.Wrapf(err, "failed to find mounted atoms path for %+v", a), cleanupAtoms
 		}
 
-		fsi := fs.NewFromMediaType(a.MediaType)
-
 		rootHash := a.Annotations[verity.VerityRootHashAnnotation]
 
 		if !m.config.AllowMissingVerityData {
@@ -110,6 +108,11 @@ func (m Molecule) mountUnderlyingAtoms() (error, func()) {
 
 		if err := os.MkdirAll(target, 0755); err != nil {
 			return err, cleanupAtoms
+		}
+
+		fsi := fs.NewFromMediaType(a.MediaType)
+		if fsi == nil {
+			return errors.Errorf("unknown media-type %s", a.MediaType), cleanupAtoms
 		}
 
 		err = fsi.Mount(m.config.AtomsPath(a.Digest.Encoded()), target, rootHash)

@@ -45,25 +45,42 @@ func GuestMount(fsImgFile string, mountpoint string, fuseCmd FuseCmd) error {
 	return nil
 }
 
+// unmounts a squash mountpoint and detaches any verity / loop devices that back
+// it. Only use this if you are sure the underlying devices aren't in use by
+// other mount points.
 func Umount(mountpoint string) error {
-	mounts, err := mount.ParseMounts("/proc/self/mountinfo")
-	if err != nil {
-		return err
-	}
-
-	// first, find the verity device that backs the mount
-	theMount, found := mounts.FindMount(mountpoint)
-	if !found {
-		return errors.Errorf("%s is not a mountpoint", mountpoint)
-	}
+	devPath, err := GetBackingDevice(mountpoint)
 
 	err = unix.Unmount(mountpoint, 0)
 	if err != nil {
 		return errors.Wrapf(err, "failed unmounting %v", mountpoint)
 	}
 
-	if _, err := os.Stat(theMount.Source); err != nil {
+	return MaybeCleanupBackingDevice(devPath)
+}
+
+func GetBackingDevice(mountpoint string) (string, error) {
+	mounts, err := mount.ParseMounts("/proc/self/mountinfo")
+	if err != nil {
+		return "", err
+	}
+
+	theMount, found := mounts.FindMount(mountpoint)
+	if !found {
+		return "", errors.Errorf("%s is not a mountpoint", mountpoint)
+	}
+	return theMount.Source, nil
+}
+
+// given a device path that had been used as the backing device for a squash
+// mountpoint, cleans up and detaches verity device if it still exists.
+//
+// If the device path does not exist, that is OK - this happens if the device
+// was a regular loopback and not -verity.
+func MaybeCleanupBackingDevice(devPath string) error {
+	if _, err := os.Stat(devPath); err != nil {
 		if os.IsNotExist(err) {
+			// It's been detached, this is fine.
 			return nil
 		}
 		return errors.WithStack(err)
@@ -72,10 +89,10 @@ func Umount(mountpoint string) error {
 	// was this a verity mount or a regular loopback mount? (if it's a
 	// regular loopback mount, we detached it above, so need to do anything
 	// special here; verity doesn't play as nicely)
-	if strings.HasSuffix(theMount.Source, verity.VeritySuffix) {
-		err = verity.VerityUnmount(theMount.Source)
+	if strings.HasSuffix(devPath, verity.VeritySuffix) {
+		err := verity.VerityUnmount(devPath)
 		if err != nil {
-			return errors.Wrapf(err, "failed verity-unmounting %v", theMount.Source)
+			return errors.Wrapf(err, "failed verity-unmounting %v", devPath)
 		}
 	}
 

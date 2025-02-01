@@ -118,8 +118,6 @@ func findErofsFuseInfo() {
 	var erofsPath string
 	if p := which("erofsfuse"); p != "" {
 		erofsPath = p
-	} else {
-		erofsPath = which("erofsfuse")
 	}
 	if erofsPath == "" {
 		return
@@ -144,7 +142,7 @@ func erofsfuseSupportsMountNotification(erofsfuse string) (string, bool) {
 	return version, false
 }
 
-var erofsNotFound = errors.Errorf("erofsfuse program not found")
+var erofsFuseNotFound = errors.Errorf("erofsfuse program not found")
 
 // erofsFuse - mount erofsFile to extractDir
 // return a pointer to the erofsfuse cmd.
@@ -154,7 +152,7 @@ func erofsFuse(erofsFile, extractDir string) (*exec.Cmd, error) {
 
 	once.Do(findErofsFuseInfo)
 	if erofsFuseInfo.Path == "" {
-		return cmd, erofsNotFound
+		return cmd, erofsFuseNotFound
 	}
 
 	notifyOpts := ""
@@ -180,7 +178,7 @@ func erofsFuse(erofsFile, extractDir string) (*exec.Cmd, error) {
 
 	logf := filepath.Join(path.Dir(extractDir), "."+filepath.Base(extractDir)+"-erofsfuse.log")
 	if cmdOut, err = os.OpenFile(logf, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0644); err != nil {
-		log.Infof("Failed to open %s for write: %v", logf, err)
+		log.Errorf("Failed to open %s for write: %v", logf, err)
 		return cmd, err
 	}
 
@@ -189,7 +187,7 @@ func erofsFuse(erofsFile, extractDir string) (*exec.Cmd, error) {
 		return cmd, errors.Wrapf(err, "Failed stat'ing %q", extractDir)
 	}
 	if fiPre.Mode()&os.ModeSymlink != 0 {
-		return cmd, errors.Errorf("Refusing to mount onto a symbolic linkd")
+		return cmd, errors.Errorf("Refusing to mount onto a symbolic link %q", extractDir)
 	}
 
 	// It would be nice to only enable debug (or maybe to only log to file at all)
@@ -349,7 +347,7 @@ func (k *FsckErofsExtractor) IsAvailable() error {
 	return nil
 }
 
-func (k *FsckErofsExtractor) Mount(squashFile, extractDir string) error {
+func (k *FsckErofsExtractor) Mount(erofsFile, extractDir string) error {
 	k.mutex.Lock()
 	defer k.mutex.Unlock()
 
@@ -362,8 +360,8 @@ func (k *FsckErofsExtractor) Mount(squashFile, extractDir string) error {
 		return nil
 	}
 
-	log.Debugf("fsck.erofs %s -> %s", squashFile, extractDir)
-	cmd := exec.Command("fsck.erofs", "-d", "--extract", extractDir, squashFile)
+	log.Debugf("fsck.erofs %s -> %s", erofsFile, extractDir)
+	cmd := exec.Command("fsck.erofs", "-d", "--extract", extractDir, erofsFile)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = nil
@@ -372,7 +370,7 @@ func (k *FsckErofsExtractor) Mount(squashFile, extractDir string) error {
 	// on failure, remove the directory
 	if err != nil {
 		if rmErr := os.RemoveAll(extractDir); rmErr != nil {
-			log.Errorf("Failed to remove %s after failed extraction of %s: %v", extractDir, squashFile, rmErr)
+			log.Errorf("Failed to remove %s after failed extraction of %s: %v", extractDir, erofsFile, rmErr)
 		}
 		return err
 	}
@@ -382,10 +380,10 @@ func (k *FsckErofsExtractor) Mount(squashFile, extractDir string) error {
 	empty, err = isEmptyDir(extractDir)
 	if err != nil {
 		return errors.Errorf("Failed to read %s after successful extraction of %s: %v",
-			extractDir, squashFile, err)
+			extractDir, erofsFile, err)
 	}
 	if empty {
-		return errors.Errorf("%s was an empty fs image", squashFile)
+		return errors.Errorf("%s was an empty fs image", erofsFile)
 	}
 
 	return nil
@@ -406,17 +404,17 @@ func (k *KernelExtractor) IsAvailable() error {
 	return nil
 }
 
-func (k *KernelExtractor) Mount(squashFile, extractDir string) error {
+func (k *KernelExtractor) Mount(erofsFile, extractDir string) error {
 	k.mutex.Lock()
 	defer k.mutex.Unlock()
 
-	if mounted, err := common.IsMountedAtDir(squashFile, extractDir); err != nil {
+	if mounted, err := common.IsMountedAtDir(erofsFile, extractDir); err != nil {
 		return err
 	} else if mounted {
 		return nil
 	}
 
-	ecmd := []string{"mount", "-terofs", "-oloop,ro", squashFile, extractDir}
+	ecmd := []string{"mount", "-terofs", "-oloop,ro", erofsFile, extractDir}
 	var output bytes.Buffer
 	cmd := exec.Command(ecmd[0], ecmd[1:]...)
 	cmd.Stdin = nil
@@ -432,12 +430,12 @@ func (k *KernelExtractor) Mount(squashFile, extractDir string) error {
 	exitError, ok := err.(*exec.ExitError)
 	if !ok {
 		retErr = errors.Errorf("kmount(%s) had unexpected error (no-rc), in exec (%v): %v",
-			squashFile, ecmd, err)
+			erofsFile, ecmd, err)
 	} else if status, ok := exitError.Sys().(syscall.WaitStatus); !ok {
 		retErr = errors.Errorf("kmount(%s) had unexpected error (no-status), in exec (%v): %v",
-			squashFile, ecmd, err)
+			erofsFile, ecmd, err)
 	} else {
-		retErr = errors.Errorf("kmount(%s) exited %d: %v", squashFile, status.ExitStatus(), output.String())
+		retErr = errors.Errorf("kmount(%s) exited %d: %v", erofsFile, status.ExitStatus(), output.String())
 	}
 
 	return retErr
@@ -482,8 +480,8 @@ func (k *ErofsFuseExtractor) Mount(erofsFile, extractDir string) error {
 	return nil
 }
 
-// ExtractSingleErofsPolicy - extract squashfile to extractDir
-func ExtractSingleErofsPolicy(squashFile, extractDir string, policy *ExtractPolicy) error {
+// ExtractSingleErofsPolicy - extract erofsfile to extractDir
+func ExtractSingleErofsPolicy(erofsFile, extractDir string, policy *ExtractPolicy) error {
 	const initName = "init"
 	if policy == nil {
 		return errors.Errorf("policy cannot be nil")
@@ -518,7 +516,7 @@ func ExtractSingleErofsPolicy(squashFile, extractDir string, policy *ExtractPoli
 		if err, ok := policy.Excuses[initName]; ok {
 			return err
 		}
-		return policy.Extractor.Mount(squashFile, fdest)
+		return policy.Extractor.Mount(erofsFile, fdest)
 	}
 
 	// At this point we are the initialzer
@@ -534,7 +532,7 @@ func ExtractSingleErofsPolicy(squashFile, extractDir string, policy *ExtractPoli
 	var extractor ErofsExtractor
 	allExcuses := []string{}
 	for _, extractor = range policy.Extractors {
-		err = extractor.Mount(squashFile, fdest)
+		err = extractor.Mount(erofsFile, fdest)
 		if err == nil {
 			policy.Extractor = extractor
 			log.Debugf("Selected erofs extractor %s", extractor.Name())
@@ -552,10 +550,10 @@ func ExtractSingleErofsPolicy(squashFile, extractDir string, policy *ExtractPoli
 	return policy.Excuses[initName]
 }
 
-// ExtractSingleErofs - extract the squashFile to extractDir
+// ExtractSingleErofs - extract the erofsFile to extractDir
 // Initialize a extractPolicy struct and then call ExtractSingleErofsPolicy
 // wik()th that.
-func ExtractSingleErofs(squashFile string, extractDir string) error {
+func ExtractSingleErofs(erofsFile string, extractDir string) error {
 	exPolInfo.once.Do(func() {
 		const envName = "STACKER_EROFS_EXTRACT_POLICY"
 		const defPolicy = "kmount erofsfuse fsc.erofs"
@@ -575,7 +573,7 @@ func ExtractSingleErofs(squashFile string, extractDir string) error {
 		return exPolInfo.err
 	}
 
-	return ExtractSingleErofsPolicy(squashFile, extractDir, exPolInfo.policy)
+	return ExtractSingleErofsPolicy(erofsFile, extractDir, exPolInfo.policy)
 }
 
 var checkSupported sync.Once

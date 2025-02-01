@@ -1,7 +1,5 @@
 package verity
 
-import "strings"
-
 type VerityMetadata bool
 
 const (
@@ -10,7 +8,3 @@ const (
 	VerityMetadataPresent VerityMetadata = true
 	VerityMetadataMissing VerityMetadata = false
 )
-
-func HasVerityMetadata(mediaType string) VerityMetadata {
-	return VerityMetadata(strings.HasSuffix(mediaType, VeritySuffix))
-}

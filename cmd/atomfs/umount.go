@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/urfave/cli"
-	"machinerun.io/atomfs/pkg/common"
+	"machinerun.io/atomfs/pkg/molecule"
 )
 
 var umountCmd = cli.Command{
@@ -40,5 +40,5 @@ func doUmount(ctx *cli.Context) error {
 		}
 	}
 
-	return atomfs.UmountWithMetadir(mountpoint, ctx.String("metadir"))
+	return molecule.UmountWithMetadir(mountpoint, ctx.String("metadir"))
 }

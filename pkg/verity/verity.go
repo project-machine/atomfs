@@ -81,6 +81,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/freddierice/go-losetup"
@@ -336,6 +337,28 @@ func findLoopBackingVerity(device string) (int64, error) {
 	return deviceNo, nil
 }
 
+func retryIfBusy(fn func() error) error {
+	const maxRetries = 5
+	var err error
+
+	for retry := 0; retry < maxRetries; retry++ {
+		err = fn()
+		if err == nil {
+			return nil
+		}
+
+		var errno syscall.Errno
+		if errors.As(err, &errno) && errno != syscall.EBUSY {
+			return err
+		}
+
+		// sleep between retries
+		time.Sleep(1 * time.Second)
+	}
+
+	return err
+}
+
 func VerityUnmount(mountPath string) error {
 	// find the loop device that backs the verity device
 	deviceNo, err := findLoopBackingVerity(mountPath)
@@ -348,7 +371,16 @@ func VerityUnmount(mountPath string) error {
 	// above). the cryptsetup API allows us to pass NULL for the crypt
 	// device, but go-cryptsetup doesn't have a way to initialize a NULL
 	// crypt device short of making the struct by hand like this.
-	err = (&cryptsetup.Device{}).Deactivate(mountPath)
+
+	// erofs may temporarily EBUSY, so retry a few times
+	err = retryIfBusy(func() error {
+		err = (&cryptsetup.Device{}).Deactivate(mountPath)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
 	if err != nil {
 		return errors.WithStack(err)
 	}

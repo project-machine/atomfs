@@ -149,7 +149,7 @@ func sqfuseSupportsMountNotification(sqfuse string) (string, bool) {
 	return version, false
 }
 
-var squashNotFound = errors.Errorf("squashfuse program not found")
+var squashFuseNotFound = errors.Errorf("squashfuse program not found")
 
 // squashFuse - mount squashFile to extractDir
 // return a pointer to the squashfuse cmd.
@@ -159,7 +159,7 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 
 	once.Do(findSquashFuseInfo)
 	if squashFuseInfo.Path == "" {
-		return cmd, squashNotFound
+		return cmd, squashFuseNotFound
 	}
 
 	notifyOpts := ""
@@ -185,7 +185,7 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 
 	logf := filepath.Join(path.Dir(extractDir), "."+filepath.Base(extractDir)+"-squashfuse.log")
 	if cmdOut, err = os.OpenFile(logf, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0644); err != nil {
-		log.Infof("Failed to open %s for write: %v", logf, err)
+		log.Errorf("Failed to open %s for write: %v", logf, err)
 		return cmd, err
 	}
 
@@ -194,7 +194,7 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 		return cmd, errors.Wrapf(err, "Failed stat'ing %q", extractDir)
 	}
 	if fiPre.Mode()&os.ModeSymlink != 0 {
-		return cmd, errors.Errorf("Refusing to mount onto a symbolic linkd")
+		return cmd, errors.Errorf("Refusing to mount onto a symbolic link %q", extractDir)
 	}
 
 	// It would be nice to only enable debug (or maybe to only log to file at all)
