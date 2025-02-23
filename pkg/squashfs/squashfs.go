@@ -20,6 +20,7 @@ import (
 	"golang.org/x/sys/unix"
 	"machinerun.io/atomfs/pkg/common"
 	"machinerun.io/atomfs/pkg/log"
+	types "machinerun.io/atomfs/pkg/types"
 	vrty "machinerun.io/atomfs/pkg/verity"
 )
 
@@ -286,8 +287,8 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 }
 
 type ExtractPolicy struct {
-	Extractors  []SquashExtractor
-	Extractor   SquashExtractor
+	Extractors  []types.FsExtractor
+	Extractor   types.FsExtractor
 	Excuses     map[string]error
 	initialized bool
 	mutex       sync.Mutex
@@ -299,27 +300,18 @@ var exPolInfo struct {
 	policy *ExtractPolicy
 }
 
-type SquashExtractor interface {
-	Name() string
-	IsAvailable() error
-	// Mount - Mount or extract path to dest.
-	//   Return nil on "already extracted"
-	//   Return error on failure.
-	Mount(path, dest string) error
-}
-
 func NewExtractPolicy(args ...string) (*ExtractPolicy, error) {
 	p := &ExtractPolicy{
-		Extractors: []SquashExtractor{},
+		Extractors: []types.FsExtractor{},
 		Excuses:    map[string]error{},
 	}
 
-	allEx := []SquashExtractor{
+	allEx := []types.FsExtractor{
 		&KernelExtractor{},
 		&SquashFuseExtractor{},
 		&UnsquashfsExtractor{},
 	}
-	byName := map[string]SquashExtractor{}
+	byName := map[string]types.FsExtractor{}
 	for _, i := range allEx {
 		byName[i.Name()] = i
 	}
@@ -536,7 +528,7 @@ func ExtractSingleSquashPolicy(squashFile, extractDir string, policy *ExtractPol
 		return policy.Excuses[initName]
 	}
 
-	var extractor SquashExtractor
+	var extractor types.FsExtractor
 	allExcuses := []string{}
 	for _, extractor = range policy.Extractors {
 		err = extractor.Mount(squashFile, fdest)

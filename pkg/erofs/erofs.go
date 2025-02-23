@@ -20,6 +20,7 @@ import (
 	"golang.org/x/sys/unix"
 	"machinerun.io/atomfs/pkg/common"
 	"machinerun.io/atomfs/pkg/log"
+	types "machinerun.io/atomfs/pkg/types"
 	vrty "machinerun.io/atomfs/pkg/verity"
 )
 
@@ -225,40 +226,6 @@ func erofsFuse(erofsFile, extractDir string) (*exec.Cmd, error) {
 		_ = cmd.Wait()
 		close(alarmCh)
 	}()
-	if erofsFuseInfo.SupportsNotify {
-		notifyCh := make(chan byte)
-		log.Infof("%s supports notify pipe, watching %q", erofsFuseInfo.Path, notifyPath)
-		go func() {
-			f, err := os.Open(notifyPath)
-			if err != nil {
-				return
-			}
-			defer f.Close()
-			b1 := make([]byte, 1)
-			for {
-				n1, err := f.Read(b1)
-				if err != nil {
-					return
-				}
-				if err == nil && n1 >= 1 {
-					break
-				}
-			}
-			notifyCh <- b1[0]
-		}()
-
-		select {
-		case <-alarmCh:
-			cmd.Process.Kill()
-			return cmd, errors.Wrapf(err, "Gave up on erofsfuse mount of %s with %s after %s", erofsFile, erofsFuseInfo.Path, timeLimit)
-		case ret := <-notifyCh:
-			if ret == 's' {
-				return cmd, nil
-			} else {
-				return cmd, errors.Errorf("erofsfuse returned an error, check %s", logf)
-			}
-		}
-	}
 	for count := 0; !common.FileChanged(fiPre, extractDir); count++ {
 		if cmd.ProcessState != nil {
 			// process exited, the Wait() call in the goroutine above
@@ -279,8 +246,8 @@ func erofsFuse(erofsFile, extractDir string) (*exec.Cmd, error) {
 }
 
 type ExtractPolicy struct {
-	Extractors  []ErofsExtractor
-	Extractor   ErofsExtractor
+	Extractors  []types.FsExtractor
+	Extractor   types.FsExtractor
 	Excuses     map[string]error
 	initialized bool
 	mutex       sync.Mutex
@@ -292,27 +259,18 @@ var exPolInfo struct {
 	policy *ExtractPolicy
 }
 
-type ErofsExtractor interface {
-	Name() string
-	IsAvailable() error
-	// Mount - Mount or extract path to dest.
-	//   Return nil on "already extracted"
-	//   Return error on failure.
-	Mount(path, dest string) error
-}
-
 func NewExtractPolicy(args ...string) (*ExtractPolicy, error) {
 	p := &ExtractPolicy{
-		Extractors: []ErofsExtractor{},
+		Extractors: []types.FsExtractor{},
 		Excuses:    map[string]error{},
 	}
 
-	allEx := []ErofsExtractor{
+	allEx := []types.FsExtractor{
 		&KernelExtractor{},
 		&ErofsFuseExtractor{},
 		&FsckErofsExtractor{},
 	}
-	byName := map[string]ErofsExtractor{}
+	byName := map[string]types.FsExtractor{}
 	for _, i := range allEx {
 		byName[i.Name()] = i
 	}
@@ -529,7 +487,7 @@ func ExtractSingleErofsPolicy(erofsFile, extractDir string, policy *ExtractPolic
 		return policy.Excuses[initName]
 	}
 
-	var extractor ErofsExtractor
+	var extractor types.FsExtractor
 	allExcuses := []string{}
 	for _, extractor = range policy.Extractors {
 		err = extractor.Mount(erofsFile, fdest)

@@ -1,33 +1,17 @@
 package fs
 
 import (
-	"io"
-
-	"machinerun.io/atomfs/pkg/common"
 	"machinerun.io/atomfs/pkg/erofs"
 	"machinerun.io/atomfs/pkg/squashfs"
-	"machinerun.io/atomfs/pkg/verity"
+	types "machinerun.io/atomfs/pkg/types"
 )
-
-type Filesystem interface {
-	// Make creates a new filesystem image.
-	Make(tempdir string, rootfs string, eps *common.ExcludePaths, verity verity.VerityMetadata) (io.ReadCloser, string, string, error)
-	// ExtractSingle extracts a filesystem image.
-	ExtractSingle(fsImgFile string, extractDir string) error
-	// Mount mounts a filesystem image on a given mountpoint.
-	Mount(fsImgFile, mountpoint, rootHash string) error
-	// Unmount umounts a filesystem image.
-	Umount(mountpoint string) error
-}
-
-type FilesystemType string
 
 const (
-	SquashfsType FilesystemType = "squashfs"
-	ErofsType    FilesystemType = "erofs"
+	SquashfsType types.FilesystemType = "squashfs"
+	ErofsType    types.FilesystemType = "erofs"
 )
 
-func New(fsType FilesystemType) Filesystem {
+func New(fsType types.FilesystemType) types.Filesystem {
 	switch fsType {
 	case SquashfsType:
 		return squashfs.New()
@@ -38,7 +22,7 @@ func New(fsType FilesystemType) Filesystem {
 	return nil
 }
 
-func NewFromMediaType(mediaType string) Filesystem {
+func NewFromMediaType(mediaType string) types.Filesystem {
 	if squashfs.IsSquashfsMediaType(mediaType) {
 		return squashfs.New()
 	} else if erofs.IsErofsMediaType(mediaType) {
