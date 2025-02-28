@@ -1,6 +1,7 @@
 package common
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,4 +47,23 @@ func TestAmHostRoot(t *testing.T) {
 		v := uidmapIsHost(testcase.uidmap)
 		assert.Equal(v, testcase.expected)
 	}
+}
+
+func TestIsEmpytDir(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	v, e := IsEmptyDir("/")
+	assert.NoError(e)
+	assert.False(v)
+
+	v, e = IsEmptyDir("/root")
+	assert.Error(e)
+
+	dname, err := os.MkdirTemp("", "squashfs_empty_test_dir")
+	assert.NoError(err)
+	defer os.RemoveAll(dname)
+
+	v, e = IsEmptyDir(dname)
+	assert.NoError(e)
+	assert.True(v)
 }

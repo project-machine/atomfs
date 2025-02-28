@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/sys/unix"
 	"machinerun.io/atomfs/pkg/common"
 	"machinerun.io/atomfs/pkg/log"
 	types "machinerun.io/atomfs/pkg/types"
@@ -25,13 +24,12 @@ import (
 )
 
 type erofsFuseInfoStruct struct {
-	Path           string
-	Version        string
-	SupportsNotify bool
+	Path    string
+	Version string
 }
 
 var once sync.Once
-var erofsFuseInfo = erofsFuseInfoStruct{"", "", false}
+var erofsFuseInfo = erofsFuseInfoStruct{"", ""}
 
 func MakeErofs(tempdir string, rootfs string, eps *common.ExcludePaths, verity vrty.VerityMetadata) (io.ReadCloser, string, string, error) {
 	var excludesFile string
@@ -117,21 +115,21 @@ func MakeErofs(tempdir string, rootfs string, eps *common.ExcludePaths, verity v
 
 func findErofsFuseInfo() {
 	var erofsPath string
-	if p := which("erofsfuse"); p != "" {
+	if p := common.Which("erofsfuse"); p != "" {
 		erofsPath = p
 	}
 	if erofsPath == "" {
 		return
 	}
-	version, supportsNotify := erofsfuseSupportsMountNotification(erofsPath)
-	log.Infof("Found erofsfuse at %s (version=%s notify=%t)", erofsPath, version, supportsNotify)
-	erofsFuseInfo = erofsFuseInfoStruct{erofsPath, version, supportsNotify}
+	version := erofsfuseVersion(erofsPath)
+	log.Infof("Found erofsfuse at %s (version=%s)", erofsPath, version)
+	erofsFuseInfo = erofsFuseInfoStruct{erofsPath, version}
 }
 
-// erofsfuseSupportsMountNotification - returns true if erofsfuse supports mount
+// erofsfuseVersion - returns true if erofsfuse supports mount
 // notification, false otherwise
 // erofsfuse is the path to the erofsfuse binary
-func erofsfuseSupportsMountNotification(erofsfuse string) (string, bool) {
+func erofsfuseVersion(erofsfuse string) string {
 	cmd := exec.Command(erofsfuse)
 
 	// `erofsfuse` always returns an error...  so we ignore it.
@@ -140,7 +138,7 @@ func erofsfuseSupportsMountNotification(erofsfuse string) (string, bool) {
 	firstLine := strings.Split(string(out[:]), "\n")[0]
 	version := strings.Split(firstLine, " ")[1]
 
-	return version, false
+	return version
 }
 
 var erofsFuseNotFound = errors.Errorf("erofsfuse program not found")
@@ -154,21 +152,6 @@ func erofsFuse(erofsFile, extractDir string) (*exec.Cmd, error) {
 	once.Do(findErofsFuseInfo)
 	if erofsFuseInfo.Path == "" {
 		return cmd, erofsFuseNotFound
-	}
-
-	notifyOpts := ""
-	notifyPath := ""
-	if erofsFuseInfo.SupportsNotify {
-		sockdir, err := os.MkdirTemp("", "sock")
-		if err != nil {
-			return cmd, err
-		}
-		defer os.RemoveAll(sockdir)
-		notifyPath = filepath.Join(sockdir, "notifypipe")
-		if err := syscall.Mkfifo(notifyPath, 0640); err != nil {
-			return cmd, err
-		}
-		notifyOpts = "notify_pipe=" + notifyPath
 	}
 
 	// given extractDir of path/to/some/dir[/], log to path/to/some/.dir-erofs.log
@@ -195,9 +178,6 @@ func erofsFuse(erofsFile, extractDir string) (*exec.Cmd, error) {
 	// if 'stacker --debug', but we do not have access to that info here.
 	// to debug erofsfuse, use "allow_other,debug"
 	optionArgs := "debug"
-	if notifyOpts != "" {
-		optionArgs += "," + notifyOpts
-	}
 	cmd = exec.Command(erofsFuseInfo.Path, "-f", "-o", optionArgs, erofsFile, extractDir)
 	cmd.Stdin = nil
 	cmd.Stdout = cmdOut
@@ -217,8 +197,10 @@ func erofsFuse(erofsFile, extractDir string) (*exec.Cmd, error) {
 	// b. the directory Entry is different than it was before the call
 	//    to erofsfuse.  We have to do this because we do not have another
 	//    way to know when the mount has been populated.
-	//    https://github.com/vasi/erofsfuse/issues/49
+	//    https://github.com/vasi/squashfuse/issues/49
 	// c. a timeout (timeLimit) was hit
+	//
+	// FIXME: this has been borrowed from squashfs code, may not be needed?
 	startTime := time.Now()
 	timeLimit := 30 * time.Second
 	alarmCh := make(chan struct{})
@@ -299,7 +281,7 @@ func (k *FsckErofsExtractor) Name() string {
 }
 
 func (k *FsckErofsExtractor) IsAvailable() error {
-	if which("fsck.erofs") == "" {
+	if common.Which("fsck.erofs") == "" {
 		return errors.Errorf("no 'fsck.erofs' in PATH")
 	}
 	return nil
@@ -310,7 +292,7 @@ func (k *FsckErofsExtractor) Mount(erofsFile, extractDir string) error {
 	defer k.mutex.Unlock()
 
 	// check if already extracted
-	empty, err := isEmptyDir(extractDir)
+	empty, err := common.IsEmptyDir(extractDir)
 	if err != nil {
 		return errors.Wrapf(err, "Error checking for empty dir")
 	}
@@ -335,7 +317,7 @@ func (k *FsckErofsExtractor) Mount(erofsFile, extractDir string) error {
 
 	// assert that extraction must create files. This way we can assume non-empty dir above
 	// was populated by fsck.erofs.
-	empty, err = isEmptyDir(extractDir)
+	empty, err = common.IsEmptyDir(extractDir)
 	if err != nil {
 		return errors.Errorf("Failed to read %s after successful extraction of %s: %v",
 			extractDir, erofsFile, err)
@@ -403,11 +385,11 @@ type ErofsFuseExtractor struct {
 	mutex sync.Mutex
 }
 
-func (k *ErofsFuseExtractor) Name() string {
+func (f *ErofsFuseExtractor) Name() string {
 	return "erofsfuse"
 }
 
-func (k *ErofsFuseExtractor) IsAvailable() error {
+func (f *ErofsFuseExtractor) IsAvailable() error {
 	once.Do(findErofsFuseInfo)
 	if erofsFuseInfo.Path == "" {
 		return errors.Errorf("no 'erofsfuse' in PATH")
@@ -415,12 +397,12 @@ func (k *ErofsFuseExtractor) IsAvailable() error {
 	return nil
 }
 
-func (k *ErofsFuseExtractor) Mount(erofsFile, extractDir string) error {
-	k.mutex.Lock()
-	defer k.mutex.Unlock()
+func (f *ErofsFuseExtractor) Mount(erofsFile, extractDir string) error {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
 
 	if mounted, err := common.IsMountedAtDir(erofsFile, extractDir); mounted && err == nil {
-		log.Debugf("[%s] %s already mounted -> %s", k.Name(), erofsFile, extractDir)
+		log.Debugf("[%s] %s already mounted -> %s", f.Name(), erofsFile, extractDir)
 		return nil
 	} else if err != nil {
 		return err
@@ -562,49 +544,4 @@ func mkerofsSupportsFeature() (bool, bool) {
 	})
 
 	return zstdIsSuspported, parallelIsSupported
-}
-
-func isEmptyDir(path string) (bool, error) {
-	fh, err := os.Open(path)
-	if err != nil {
-		return false, err
-	}
-
-	_, err = fh.ReadDir(1)
-	if err == io.EOF {
-		return true, nil
-	}
-	return false, err
-}
-
-// which - like the unix utility, return empty string for not-found.
-// this might fit well in lib/, but currently lib's test imports
-// erofs creating a import loop.
-func which(name string) string {
-	return whichSearch(name, strings.Split(os.Getenv("PATH"), ":"))
-}
-
-func whichSearch(name string, paths []string) string {
-	var search []string
-
-	if strings.ContainsRune(name, os.PathSeparator) {
-		if filepath.IsAbs(name) {
-			search = []string{name}
-		} else {
-			search = []string{"./" + name}
-		}
-	} else {
-		search = []string{}
-		for _, p := range paths {
-			search = append(search, filepath.Join(p, name))
-		}
-	}
-
-	for _, fPath := range search {
-		if err := unix.Access(fPath, unix.X_OK); err == nil {
-			return fPath
-		}
-	}
-
-	return ""
 }

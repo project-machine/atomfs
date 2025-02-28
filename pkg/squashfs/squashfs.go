@@ -17,7 +17,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/pkg/errors"
-	"golang.org/x/sys/unix"
 	"machinerun.io/atomfs/pkg/common"
 	"machinerun.io/atomfs/pkg/log"
 	types "machinerun.io/atomfs/pkg/types"
@@ -111,10 +110,10 @@ func MakeSquashfs(tempdir string, rootfs string, eps *common.ExcludePaths, verit
 
 func findSquashFuseInfo() {
 	var sqfsPath string
-	if p := which("squashfuse_ll"); p != "" {
+	if p := common.Which("squashfuse_ll"); p != "" {
 		sqfsPath = p
 	} else {
-		sqfsPath = which("squashfuse")
+		sqfsPath = common.Which("squashfuse")
 	}
 	if sqfsPath == "" {
 		return
@@ -340,7 +339,7 @@ func (k *UnsquashfsExtractor) Name() string {
 }
 
 func (k *UnsquashfsExtractor) IsAvailable() error {
-	if which("unsquashfs") == "" {
+	if common.Which("unsquashfs") == "" {
 		return errors.Errorf("no 'unsquashfs' in PATH")
 	}
 	return nil
@@ -351,7 +350,7 @@ func (k *UnsquashfsExtractor) Mount(squashFile, extractDir string) error {
 	defer k.mutex.Unlock()
 
 	// check if already extracted
-	empty, err := isEmptyDir(extractDir)
+	empty, err := common.IsEmptyDir(extractDir)
 	if err != nil {
 		return errors.Wrapf(err, "Error checking for empty dir")
 	}
@@ -376,7 +375,7 @@ func (k *UnsquashfsExtractor) Mount(squashFile, extractDir string) error {
 
 	// assert that extraction must create files. This way we can assume non-empty dir above
 	// was populated by unsquashfs.
-	empty, err = isEmptyDir(extractDir)
+	empty, err = common.IsEmptyDir(extractDir)
 	if err != nil {
 		return errors.Errorf("Failed to read %s after successful extraction of %s: %v",
 			extractDir, squashFile, err)
@@ -597,50 +596,4 @@ func mksquashfsSupportsZstd() bool {
 	})
 
 	return zstdIsSuspported
-}
-
-func isEmptyDir(path string) (bool, error) {
-	fh, err := os.Open(path)
-	if err != nil {
-		return false, err
-	}
-	defer fh.Close()
-
-	_, err = fh.ReadDir(1)
-	if err == io.EOF {
-		return true, nil
-	}
-	return false, err
-}
-
-// which - like the unix utility, return empty string for not-found.
-// this might fit well in lib/, but currently lib's test imports
-// squashfs creating a import loop.
-func which(name string) string {
-	return whichSearch(name, strings.Split(os.Getenv("PATH"), ":"))
-}
-
-func whichSearch(name string, paths []string) string {
-	var search []string
-
-	if strings.ContainsRune(name, os.PathSeparator) {
-		if filepath.IsAbs(name) {
-			search = []string{name}
-		} else {
-			search = []string{"./" + name}
-		}
-	} else {
-		search = []string{}
-		for _, p := range paths {
-			search = append(search, filepath.Join(p, name))
-		}
-	}
-
-	for _, fPath := range search {
-		if err := unix.Access(fPath, unix.X_OK); err == nil {
-			return fPath
-		}
-	}
-
-	return ""
 }
