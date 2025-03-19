@@ -704,6 +704,7 @@ func isEmptyDir(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	defer fh.Close()
 
 	_, err = fh.ReadDir(1)
 	if err == io.EOF {
