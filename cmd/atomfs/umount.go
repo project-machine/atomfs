@@ -5,8 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/urfave/cli"
-	"machinerun.io/atomfs"
-	"machinerun.io/atomfs/mount"
+	"machinerun.io/atomfs/pkg/molecule"
 )
 
 var umountCmd = cli.Command{
@@ -26,11 +25,6 @@ func umountUsage(me string) error {
 	return fmt.Errorf("Usage: %s umount mountpoint", me)
 }
 
-func isMountpoint(p string) bool {
-	mounted, err := mount.IsMountpoint(p)
-	return err == nil && mounted
-}
-
 func doUmount(ctx *cli.Context) error {
 	if ctx.NArg() < 1 {
 		return umountUsage(ctx.App.Name)
@@ -46,5 +40,5 @@ func doUmount(ctx *cli.Context) error {
 		}
 	}
 
-	return atomfs.UmountWithMetadir(mountpoint, ctx.String("metadir"))
+	return molecule.UmountWithMetadir(mountpoint, ctx.String("metadir"))
 }

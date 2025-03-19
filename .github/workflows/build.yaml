@@ -20,7 +20,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install bats fuse3 make libcryptsetup-dev libgpgme-dev \
           libcap-dev lxc libdevmapper-dev libacl1-dev libarchive-tools \
-          squashfuse squashfs-tools
+          squashfuse squashfs-tools erofs-utils
       - name: setup lxc
         run: |
           chmod ugo+x $HOME
