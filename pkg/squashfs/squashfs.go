@@ -17,107 +17,22 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/pkg/errors"
-	"golang.org/x/sys/unix"
-
-	"machinerun.io/atomfs/log"
-	"machinerun.io/atomfs/mount"
+	"machinerun.io/atomfs/pkg/common"
+	"machinerun.io/atomfs/pkg/log"
+	types "machinerun.io/atomfs/pkg/types"
+	vrty "machinerun.io/atomfs/pkg/verity"
 )
-
-var checkZstdSupported sync.Once
-var zstdIsSuspported bool
-
-var exPolInfo struct {
-	once   sync.Once
-	err    error
-	policy *ExtractPolicy
-}
-
-// ExcludePaths represents a list of paths to exclude in a squashfs listing.
-// Users should do something like filepath.Walk() over the whole filesystem,
-// calling AddExclude() or AddInclude() based on whether they want to include
-// or exclude a particular file. Note that if e.g. /usr is excluded, then
-// everyting underneath is also implicitly excluded. The
-// AddExclude()/AddInclude() methods do the math to figure out what is the
-// correct set of things to exclude or include based on what paths have been
-// previously included or excluded.
-type ExcludePaths struct {
-	exclude map[string]bool
-	include []string
-}
 
 type squashFuseInfoStruct struct {
 	Path           string
 	Version        string
-	SupportsNotfiy bool
+	SupportsNotify bool
 }
 
 var once sync.Once
 var squashFuseInfo = squashFuseInfoStruct{"", "", false}
 
-func NewExcludePaths() *ExcludePaths {
-	return &ExcludePaths{
-		exclude: map[string]bool{},
-		include: []string{},
-	}
-}
-
-func (eps *ExcludePaths) AddExclude(p string) {
-	for _, inc := range eps.include {
-		// If /usr/bin/ls has changed but /usr hasn't, we don't want to list
-		// /usr in the include paths any more, so let's be sure to only
-		// add things which aren't prefixes.
-		if strings.HasPrefix(inc, p) {
-			return
-		}
-	}
-	eps.exclude[p] = true
-}
-
-func (eps *ExcludePaths) AddInclude(orig string, isDir bool) {
-	// First, remove this thing and all its parents from exclude.
-	p := orig
-
-	// normalize to the first dir
-	if !isDir {
-		p = path.Dir(p)
-	}
-	for {
-		// our paths are all absolute, so this is a base case
-		if p == "/" {
-			break
-		}
-
-		delete(eps.exclude, p)
-		p = filepath.Dir(p)
-	}
-
-	// now add it to the list of includes, so we don't accidentally re-add
-	// anything above.
-	eps.include = append(eps.include, orig)
-}
-
-func (eps *ExcludePaths) String() (string, error) {
-	var buf bytes.Buffer
-	for p := range eps.exclude {
-		_, err := buf.WriteString(p)
-		if err != nil {
-			return "", err
-		}
-		_, err = buf.WriteString("\n")
-		if err != nil {
-			return "", err
-		}
-	}
-
-	_, err := buf.WriteString("\n")
-	if err != nil {
-		return "", err
-	}
-
-	return buf.String(), nil
-}
-
-func MakeSquashfs(tempdir string, rootfs string, eps *ExcludePaths, verity VerityMetadata) (io.ReadCloser, string, string, error) {
+func MakeSquashfs(tempdir string, rootfs string, eps *common.ExcludePaths, verity vrty.VerityMetadata) (io.ReadCloser, string, string, error) {
 	var excludesFile string
 	var err error
 	var toExclude string
@@ -149,9 +64,19 @@ func MakeSquashfs(tempdir string, rootfs string, eps *ExcludePaths, verity Verit
 	if err != nil {
 		return nil, "", rootHash, err
 	}
+	// the following achieves the effect of creating a temporary file name
+	// without actually creating the file;the goal being to provide a temporary
+	// filename to provide to `mkfs.XXX` tool so we have a predictable name to
+	// consume after `mkfs.XXX` has completed its task.
+	//
+	// NB: there's a TOCTOU here; something else can predict and produce
+	// output in the tempfile name we created after we delete it and before
+	// `mkfs.XXX` runs.
 	tmpSquashfs.Close()
 	os.Remove(tmpSquashfs.Name())
+
 	defer os.Remove(tmpSquashfs.Name())
+
 	args := []string{rootfs, tmpSquashfs.Name()}
 	compression := GzipCompression
 	if mksquashfsSupportsZstd() {
@@ -169,7 +94,7 @@ func MakeSquashfs(tempdir string, rootfs string, eps *ExcludePaths, verity Verit
 	}
 
 	if verity {
-		rootHash, err = appendVerityData(tmpSquashfs.Name())
+		rootHash, err = vrty.AppendVerityData(tmpSquashfs.Name())
 		if err != nil {
 			return nil, "", rootHash, err
 		}
@@ -180,41 +105,15 @@ func MakeSquashfs(tempdir string, rootfs string, eps *ExcludePaths, verity Verit
 		return nil, "", rootHash, errors.WithStack(err)
 	}
 
-	return blob, GenerateSquashfsMediaType(compression, verity), rootHash, nil
-}
-
-func isMountedAtDir(_, dest string) (bool, error) {
-	dstat, err := os.Stat(dest)
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	if !dstat.IsDir() {
-		return false, nil
-	}
-	mounts, err := mount.ParseMounts("/proc/self/mountinfo")
-	if err != nil {
-		return false, err
-	}
-
-	fdest, err := filepath.Abs(dest)
-	if err != nil {
-		return false, err
-	}
-	for _, m := range mounts {
-		if m.Target == fdest {
-			return true, nil
-		}
-	}
-
-	return false, nil
+	return blob, GenerateSquashfsMediaType(compression), rootHash, nil
 }
 
 func findSquashFuseInfo() {
 	var sqfsPath string
-	if p := which("squashfuse_ll"); p != "" {
+	if p := common.Which("squashfuse_ll"); p != "" {
 		sqfsPath = p
 	} else {
-		sqfsPath = which("squashfuse")
+		sqfsPath = common.Which("squashfuse")
 	}
 	if sqfsPath == "" {
 		return
@@ -250,7 +149,7 @@ func sqfuseSupportsMountNotification(sqfuse string) (string, bool) {
 	return version, false
 }
 
-var squashNotFound = errors.Errorf("squashfuse program not found")
+var squashFuseNotFound = errors.Errorf("squashfuse program not found")
 
 // squashFuse - mount squashFile to extractDir
 // return a pointer to the squashfuse cmd.
@@ -260,12 +159,12 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 
 	once.Do(findSquashFuseInfo)
 	if squashFuseInfo.Path == "" {
-		return cmd, squashNotFound
+		return cmd, squashFuseNotFound
 	}
 
 	notifyOpts := ""
 	notifyPath := ""
-	if squashFuseInfo.SupportsNotfiy {
+	if squashFuseInfo.SupportsNotify {
 		sockdir, err := os.MkdirTemp("", "sock")
 		if err != nil {
 			return cmd, err
@@ -286,7 +185,7 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 
 	logf := filepath.Join(path.Dir(extractDir), "."+filepath.Base(extractDir)+"-squashfuse.log")
 	if cmdOut, err = os.OpenFile(logf, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0644); err != nil {
-		log.Infof("Failed to open %s for write: %v", logf, err)
+		log.Errorf("Failed to open %s for write: %v", logf, err)
 		return cmd, err
 	}
 
@@ -295,7 +194,7 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 		return cmd, errors.Wrapf(err, "Failed stat'ing %q", extractDir)
 	}
 	if fiPre.Mode()&os.ModeSymlink != 0 {
-		return cmd, errors.Errorf("Refusing to mount onto a symbolic linkd")
+		return cmd, errors.Errorf("Refusing to mount onto a symbolic link %q", extractDir)
 	}
 
 	// It would be nice to only enable debug (or maybe to only log to file at all)
@@ -333,7 +232,7 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 		_ = cmd.Wait()
 		close(alarmCh)
 	}()
-	if squashFuseInfo.SupportsNotfiy {
+	if squashFuseInfo.SupportsNotify {
 		notifyCh := make(chan byte)
 		log.Infof("%s supports notify pipe, watching %q", squashFuseInfo.Path, notifyPath)
 		go func() {
@@ -367,7 +266,7 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 			}
 		}
 	}
-	for count := 0; !fileChanged(fiPre, extractDir); count++ {
+	for count := 0; !common.FileChanged(fiPre, extractDir); count++ {
 		if cmd.ProcessState != nil {
 			// process exited, the Wait() call in the goroutine above
 			// caused ProcessState to be populated.
@@ -387,34 +286,31 @@ func squashFuse(squashFile, extractDir string) (*exec.Cmd, error) {
 }
 
 type ExtractPolicy struct {
-	Extractors  []SquashExtractor
-	Extractor   SquashExtractor
+	Extractors  []types.FsExtractor
+	Extractor   types.FsExtractor
 	Excuses     map[string]error
 	initialized bool
 	mutex       sync.Mutex
 }
 
-type SquashExtractor interface {
-	Name() string
-	IsAvailable() error
-	// Mount - Mount or extract path to dest.
-	//   Return nil on "already extracted"
-	//   Return error on failure.
-	Mount(path, dest string) error
+var exPolInfo struct {
+	once   sync.Once
+	err    error
+	policy *ExtractPolicy
 }
 
 func NewExtractPolicy(args ...string) (*ExtractPolicy, error) {
 	p := &ExtractPolicy{
-		Extractors: []SquashExtractor{},
+		Extractors: []types.FsExtractor{},
 		Excuses:    map[string]error{},
 	}
 
-	allEx := []SquashExtractor{
+	allEx := []types.FsExtractor{
 		&KernelExtractor{},
 		&SquashFuseExtractor{},
 		&UnsquashfsExtractor{},
 	}
-	byName := map[string]SquashExtractor{}
+	byName := map[string]types.FsExtractor{}
 	for _, i := range allEx {
 		byName[i.Name()] = i
 	}
@@ -443,7 +339,7 @@ func (k *UnsquashfsExtractor) Name() string {
 }
 
 func (k *UnsquashfsExtractor) IsAvailable() error {
-	if which("unsquashfs") == "" {
+	if common.Which("unsquashfs") == "" {
 		return errors.Errorf("no 'unsquashfs' in PATH")
 	}
 	return nil
@@ -454,7 +350,7 @@ func (k *UnsquashfsExtractor) Mount(squashFile, extractDir string) error {
 	defer k.mutex.Unlock()
 
 	// check if already extracted
-	empty, err := isEmptyDir(extractDir)
+	empty, err := common.IsEmptyDir(extractDir)
 	if err != nil {
 		return errors.Wrapf(err, "Error checking for empty dir")
 	}
@@ -479,7 +375,7 @@ func (k *UnsquashfsExtractor) Mount(squashFile, extractDir string) error {
 
 	// assert that extraction must create files. This way we can assume non-empty dir above
 	// was populated by unsquashfs.
-	empty, err = isEmptyDir(extractDir)
+	empty, err = common.IsEmptyDir(extractDir)
 	if err != nil {
 		return errors.Errorf("Failed to read %s after successful extraction of %s: %v",
 			extractDir, squashFile, err)
@@ -500,7 +396,7 @@ func (k *KernelExtractor) Name() string {
 }
 
 func (k *KernelExtractor) IsAvailable() error {
-	if !AmHostRoot() {
+	if !common.AmHostRoot() {
 		return errors.Errorf("not host root")
 	}
 	return nil
@@ -510,7 +406,7 @@ func (k *KernelExtractor) Mount(squashFile, extractDir string) error {
 	k.mutex.Lock()
 	defer k.mutex.Unlock()
 
-	if mounted, err := isMountedAtDir(squashFile, extractDir); err != nil {
+	if mounted, err := common.IsMountedAtDir(squashFile, extractDir); err != nil {
 		return err
 	} else if mounted {
 		return nil
@@ -563,7 +459,7 @@ func (k *SquashFuseExtractor) Mount(squashFile, extractDir string) error {
 	k.mutex.Lock()
 	defer k.mutex.Unlock()
 
-	if mounted, err := isMountedAtDir(squashFile, extractDir); mounted && err == nil {
+	if mounted, err := common.IsMountedAtDir(squashFile, extractDir); mounted && err == nil {
 		log.Debugf("[%s] %s already mounted -> %s", k.Name(), squashFile, extractDir)
 		return nil
 	} else if err != nil {
@@ -631,7 +527,7 @@ func ExtractSingleSquashPolicy(squashFile, extractDir string, policy *ExtractPol
 		return policy.Excuses[initName]
 	}
 
-	var extractor SquashExtractor
+	var extractor types.FsExtractor
 	allExcuses := []string{}
 	for _, extractor = range policy.Extractors {
 		err = extractor.Mount(squashFile, fdest)
@@ -678,6 +574,9 @@ func ExtractSingleSquash(squashFile string, extractDir string) error {
 	return ExtractSingleSquashPolicy(squashFile, extractDir, exPolInfo.policy)
 }
 
+var checkZstdSupported sync.Once
+var zstdIsSuspported bool
+
 func mksquashfsSupportsZstd() bool {
 	checkZstdSupported.Do(func() {
 		var stdoutBuffer strings.Builder
@@ -697,50 +596,4 @@ func mksquashfsSupportsZstd() bool {
 	})
 
 	return zstdIsSuspported
-}
-
-func isEmptyDir(path string) (bool, error) {
-	fh, err := os.Open(path)
-	if err != nil {
-		return false, err
-	}
-	defer fh.Close()
-
-	_, err = fh.ReadDir(1)
-	if err == io.EOF {
-		return true, nil
-	}
-	return false, err
-}
-
-// which - like the unix utility, return empty string for not-found.
-// this might fit well in lib/, but currently lib's test imports
-// squashfs creating a import loop.
-func which(name string) string {
-	return whichSearch(name, strings.Split(os.Getenv("PATH"), ":"))
-}
-
-func whichSearch(name string, paths []string) string {
-	var search []string
-
-	if strings.ContainsRune(name, os.PathSeparator) {
-		if filepath.IsAbs(name) {
-			search = []string{name}
-		} else {
-			search = []string{"./" + name}
-		}
-	} else {
-		search = []string{}
-		for _, p := range paths {
-			search = append(search, filepath.Join(p, name))
-		}
-	}
-
-	for _, fPath := range search {
-		if err := unix.Access(fPath, unix.X_OK); err == nil {
-			return fPath
-		}
-	}
-
-	return ""
 }

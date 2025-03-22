@@ -9,9 +9,8 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
-
-	"machinerun.io/atomfs"
-	"machinerun.io/atomfs/squashfs"
+	"machinerun.io/atomfs/pkg/common"
+	"machinerun.io/atomfs/pkg/molecule"
 )
 
 var mountCmd = cli.Command{
@@ -51,7 +50,7 @@ func findImage(ctx *cli.Context) (string, string, error) {
 	}
 	ocidir := r[0]
 	tag := r[1]
-	if !atomfs.PathExists(ocidir) {
+	if !common.PathExists(ocidir) {
 		return "", "", fmt.Errorf("oci directory %s does not exist: %w", ocidir, mountUsage(ctx.App.Name))
 	}
 	return ocidir, tag, nil
@@ -94,7 +93,7 @@ func doMount(ctx *cli.Context) error {
 			return fmt.Errorf("--persist requires an argument")
 		}
 	}
-	opts := atomfs.MountOCIOpts{
+	opts := molecule.MountOCIOpts{
 		OCIDir:                 absOCIDir,
 		Tag:                    tag,
 		Target:                 absTarget,
@@ -104,7 +103,7 @@ func doMount(ctx *cli.Context) error {
 		MetadataDir:            ctx.String("metadir"), // nil here means /run/atomfs
 	}
 
-	mol, err := atomfs.BuildMoleculeFromOCI(opts)
+	mol, err := molecule.BuildMoleculeFromOCI(opts)
 	if err != nil {
 		return errors.Wrapf(err, "couldn't build molecule with opts %+v", opts)
 	}
@@ -132,7 +131,7 @@ func amPrivileged() bool {
 
 func squashUmount(p string) error {
 	if amPrivileged() {
-		return squashfs.Umount(p)
+		return common.Umount(p)
 	}
 	return RunCommand("fusermount", "-u", p)
 }

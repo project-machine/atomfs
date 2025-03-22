@@ -6,7 +6,7 @@ require (
 	github.com/freddierice/go-losetup v0.0.0-20220711213114-2a14873012db
 	github.com/martinjungblut/go-cryptsetup v0.0.0-20220520180014-fd0874fd07a6
 	github.com/opencontainers/go-digest v1.0.0
-	github.com/opencontainers/image-spec v1.1.0-rc2
+	github.com/opencontainers/image-spec v1.1.0
 	github.com/opencontainers/runc v1.2.3 // indirect
 	github.com/opencontainers/umoci v0.4.8-0.20220412065115-12453f247749
 	github.com/pkg/errors v0.9.1
@@ -22,7 +22,6 @@ require (
 	github.com/cyphar/filepath-securejoin v0.3.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/klauspost/compress v1.15.15 // indirect
 	github.com/klauspost/pgzip v1.2.6-0.20220930104621-17e8dac29df8 // indirect
 	github.com/moby/sys/user v0.3.0 // indirect
