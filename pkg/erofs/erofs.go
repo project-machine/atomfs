@@ -31,6 +31,10 @@ type erofsFuseInfoStruct struct {
 var once sync.Once
 var erofsFuseInfo = erofsFuseInfoStruct{"", ""}
 
+const PolicyEnvName = "STACKER_EROFS_EXTRACT_POLICY"
+const DefPolicies = "kmount erofsfuse fsck.erofs"
+const AllPolicies = "kmount erofsfuse fsck.erofs"
+
 func MakeErofs(tempdir string, rootfs string, eps *common.ExcludePaths, verity vrty.VerityMetadata) (io.ReadCloser, string, string, error) {
 	var excludesFile string
 	var err error
@@ -495,11 +499,9 @@ func ExtractSingleErofsPolicy(erofsFile, extractDir string, policy *ExtractPolic
 // wik()th that.
 func ExtractSingleErofs(erofsFile string, extractDir string) error {
 	exPolInfo.once.Do(func() {
-		const envName = "STACKER_EROFS_EXTRACT_POLICY"
-		const defPolicy = "kmount erofsfuse fsc.erofs"
-		val := os.Getenv(envName)
+		val := os.Getenv(PolicyEnvName)
 		if val == "" {
-			val = defPolicy
+			val = DefPolicies
 		}
 		exPolInfo.policy, exPolInfo.err = NewExtractPolicy(strings.Fields(val)...)
 		if exPolInfo.err == nil {
