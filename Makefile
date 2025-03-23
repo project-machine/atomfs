@@ -12,7 +12,7 @@ VERSION_LDFLAGS=-X main.Version=$(MAIN_VERSION)
 BATS = $(TOOLS_D)/bin/bats
 BATS_VERSION := v1.10.0
 STACKER = $(TOOLS_D)/bin/stacker
-STACKER_VERSION := v1.1.0-erofs
+STACKER_VERSION := v1.1.0-rc1
 TOOLS_D := $(ROOT)/tools
 GOCOVERDIR ?= $(ROOT)
 
@@ -36,7 +36,7 @@ gotest: $(GO_SRC)
 
 $(STACKER):
 	mkdir -p $(TOOLS_D)/bin
-	wget --progress=dot:giga https://github.com/rchincha/stacker/releases/download/$(STACKER_VERSION)/stacker
+	wget --progress=dot:giga https://github.com/project-stacker/stacker/releases/download/$(STACKER_VERSION)/stacker
 	chmod +x stacker
 	cp stacker $(TOOLS_D)/bin/
 
