@@ -415,11 +415,7 @@ func UmountWithMetadir(dest, metadirArg string) error {
 		}
 	}
 
-	mountNSName, err := common.GetMountNSName()
-	if err != nil {
-		return err
-	}
-	destMetaDir := filepath.Join(common.RuntimeDir(metadir), "meta", mountNSName, common.ReplacePathSeparators(dest))
+	destMetaDir := filepath.Join(common.RuntimeDir(metadir))
 	if err := os.RemoveAll(destMetaDir); err != nil {
 		return err
 	}
