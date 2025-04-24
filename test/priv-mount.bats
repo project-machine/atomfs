@@ -40,6 +40,42 @@ function setup() {
 
 }
 
+@test "RO mount/umount/remount/umount of good image works" {
+    run atomfs-cover --debug mount ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
+    assert_success
+    assert_file_exists $MP/1.README.md
+    assert_file_exists $MP/random.txt
+    assert_dir_exists $ATOMFS_TEST_RUN_DIR/meta/$MY_MNTNSNAME/
+
+    run atomfs-cover --debug umount $MP
+    assert_success
+
+    # mount point and meta dir should exist but be empty:
+    assert_dir_exists $MP
+    assert [ -z $( ls -A $MP) ]
+    assert_dir_exists $ATOMFS_TEST_RUN_DIR/meta/$MY_MNTNSNAME/
+    assert [ -z $( ls -A $ATOMFS_TEST_RUN_DIR/meta/$MY_MNTNSNAME/ ) ]
+
+    # rinse, repeat:
+
+    run atomfs-cover --debug mount ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
+    assert_success
+    assert_file_exists $MP/1.README.md
+    assert_file_exists $MP/random.txt
+    assert_dir_exists $ATOMFS_TEST_RUN_DIR/meta/$MY_MNTNSNAME/
+
+    run atomfs-cover --debug umount $MP
+    assert_success
+
+    # mount point and meta dir should exist but be empty:
+    assert_dir_exists $MP
+    assert [ -z $( ls -A $MP) ]
+    assert_dir_exists $ATOMFS_TEST_RUN_DIR/meta/$MY_MNTNSNAME/
+    assert [ -z $( ls -A $ATOMFS_TEST_RUN_DIR/meta/$MY_MNTNSNAME/ ) ]
+
+}
+
+
 @test "mount with missing verity data fails" {
     run atomfs-cover --debug mount ${BATS_SUITE_TMPDIR}/oci-no-verity:test-squashfs $MP
     assert_failure
