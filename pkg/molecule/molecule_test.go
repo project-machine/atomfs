@@ -22,5 +22,5 @@ func TestAllowMissingVerityData(t *testing.T) {
 
 	err, _ := mol.mountUnderlyingAtoms()
 	assert.NotNil(err)
-	assert.Equal(fmt.Sprintf("sha256:%s is missing verity data", hash), err.Error())
+	assert.Contains(err.Error(), fmt.Sprintf("sha256:%s has no root hash", hash))
 }

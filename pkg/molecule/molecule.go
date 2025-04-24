@@ -73,10 +73,14 @@ func (m Molecule) mountUnderlyingAtoms() (error, func()) {
 
 		rootHash := a.Annotations[verity.VerityRootHashAnnotation]
 
+		if rootHash == "" {
+			rootHash = a.Annotations[verity.VerityRootHashAnnotation_Previous]
+		}
+
 		if !m.config.AllowMissingVerityData {
 
 			if rootHash == "" {
-				return errors.Errorf("%v is missing verity data", a.Digest), cleanupAtoms
+				return errors.Errorf("%v has no root hash in %q or %q, see: %+v", a.Digest, verity.VerityRootHashAnnotation, verity.VerityRootHashAnnotation_Previous, a.Annotations), cleanupAtoms
 			}
 			if !common.AmHostRoot() {
 				return errors.Errorf("won't guestmount an image with verity data without --allow-missing-verity"), cleanupAtoms

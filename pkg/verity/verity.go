@@ -90,6 +90,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const VerityRootHashAnnotation_Previous = "io.stackeroci.stacker.squashfs_verity_root_hash"
 const VerityRootHashAnnotation = "io.stackeroci.stacker.atomfs_verity_root_hash"
 
 type verityDeviceType struct {

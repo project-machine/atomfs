@@ -11,6 +11,8 @@ GO_SRC := $(shell find . -name "*.go")
 VERSION_LDFLAGS=-X main.Version=$(MAIN_VERSION)
 BATS = $(TOOLS_D)/bin/bats
 BATS_VERSION := v1.10.0
+PRE_EROFS_STACKER = $(TOOLS_D)/bin/pre-erofs-stacker
+PRE_EROFS_STACKER_VERSION := v1.0.0
 STACKER = $(TOOLS_D)/bin/stacker
 STACKER_VERSION := v1.1.0-rc1
 TOOLS_D := $(ROOT)/tools
@@ -34,6 +36,11 @@ atomfs-cover: BUILDCOVERFLAGS=-cover
 gotest: $(GO_SRC)
 	go test -coverprofile=unit-coverage.txt -ldflags "$(VERSION_LDFLAGS)"  ./...
 
+$(PRE_EROFS_STACKER):
+	mkdir -p $(TOOLS_D)/bin
+	wget --progress=dot:giga https://github.com/project-stacker/stacker/releases/download/$(PRE_EROFS_STACKER_VERSION)/stacker --output-document $(TOOLS_D)/bin/pre-erofs-stacker
+	chmod +x $(TOOLS_D)/bin/pre-erofs-stacker
+
 $(STACKER):
 	mkdir -p $(TOOLS_D)/bin
 	wget --progress=dot:giga https://github.com/project-stacker/stacker/releases/download/$(STACKER_VERSION)/stacker
@@ -49,7 +56,7 @@ $(BATS):
 	git clone --depth 1 https://github.com/bats-core/bats-assert $(ROOT)/test/test_helper/bats-assert
 	git clone --depth 1 https://github.com/bats-core/bats-file $(ROOT)/test/test_helper/bats-file
 
-batstest: $(BATS) $(STACKER) atomfs-cover test/random.txt testimages
+batstest: $(BATS) $(STACKER) $(PRE_EROFS_STACKER) atomfs-cover test/random.txt testimages
 	cd $(ROOT)/test; sudo GOCOVERDIR=$(GOCOVERDIR) $(BATS) --tap --timing priv-*.bats
 	cd $(ROOT)/test; GOCOVERDIR=$(GOCOVERDIR) $(BATS) --tap --timing unpriv-*.bats
 	go tool covdata textfmt -i $(GOCOVERDIR) -o integ-coverage.txt
