@@ -36,9 +36,8 @@ gotest: $(GO_SRC)
 
 $(STACKER):
 	mkdir -p $(TOOLS_D)/bin
-	wget --progress=dot:giga https://github.com/project-stacker/stacker/releases/download/$(STACKER_VERSION)/stacker
-	chmod +x stacker
-	cp stacker $(TOOLS_D)/bin/
+	wget --progress=dot:giga https://github.com/project-stacker/stacker/releases/download/$(STACKER_VERSION)/stacker --output-document $(TOOLS_D)/bin/stacker
+	chmod +x $(TOOLS_D)/bin/stacker
 
 $(BATS):
 	mkdir -p $(TOOLS_D)/bin
