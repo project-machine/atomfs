@@ -32,6 +32,10 @@ type squashFuseInfoStruct struct {
 var once sync.Once
 var squashFuseInfo = squashFuseInfoStruct{"", "", false}
 
+const PolicyEnvName = "STACKER_SQUASHFS_EXTRACT_POLICY"
+const DefPolicies = "kmount squashfuse unsquashfs"
+const AllPolicies = "kmount squashfuse unsquashfs"
+
 func MakeSquashfs(tempdir string, rootfs string, eps *common.ExcludePaths, verity vrty.VerityMetadata) (io.ReadCloser, string, string, error) {
 	var excludesFile string
 	var err error
@@ -553,11 +557,9 @@ func ExtractSingleSquashPolicy(squashFile, extractDir string, policy *ExtractPol
 // wik()th that.
 func ExtractSingleSquash(squashFile string, extractDir string) error {
 	exPolInfo.once.Do(func() {
-		const envName = "STACKER_SQUASHFS_EXTRACT_POLICY"
-		const defPolicy = "kmount squashfuse unsquashfs"
-		val := os.Getenv(envName)
+		val := os.Getenv(PolicyEnvName)
 		if val == "" {
-			val = defPolicy
+			val = DefPolicies
 		}
 		exPolInfo.policy, exPolInfo.err = NewExtractPolicy(strings.Fields(val)...)
 		if exPolInfo.err == nil {
