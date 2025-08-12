@@ -1,6 +1,6 @@
 all: gotest atomfs
 
-MAIN_VERSION ?= $(shell git describe --always --dirty || echo no-git)
+MAIN_VERSION ?= $(shell git describe --always --tags --dirty || echo no-git)
 ifeq ($(MAIN_VERSION),$(filter $(MAIN_VERSION), "", no-git))
 $(error "Bad value for MAIN_VERSION: '$(MAIN_VERSION)'")
 endif
@@ -85,3 +85,6 @@ toolsclean:
 clean:  toolsclean
 	rm -rf $(ROOT)/bin
 	rm -f .made-*
+
+debug:
+	@echo MAIN_VERSION=$(MAIN_VERSION)
