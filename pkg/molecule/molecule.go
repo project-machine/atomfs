@@ -25,22 +25,31 @@ type Molecule struct {
 	config MountOCIOpts
 }
 
-func (m Molecule) MetadataPath() (string, error) {
+// MetadataDir: Return a metadir for this molecule.
+// Returns:
+//
+//	the base runtime dir (e.g. /run/atomfs),
+//	the full metadata path (e.g. /run/atomfs/meta/NSNAME/expanded-path)
+//	error
+func (m Molecule) MetadataPath() (string, string, error) {
 
 	mountNSName, err := common.GetMountNSName()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	absTarget, err := filepath.Abs(m.config.Target)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	metadir := filepath.Join(common.RuntimeDir(m.config.MetadataDir), "meta", mountNSName, common.ReplacePathSeparators(absTarget))
-	return metadir, nil
+	runtimedir := common.RuntimeDir(m.config.MetadataDir)
+
+	metadir := filepath.Join(runtimedir, "meta", mountNSName, common.ReplacePathSeparators(absTarget))
+
+	return runtimedir, metadir, nil
 }
 
 func (m Molecule) MountedAtomsPath(parts ...string) (string, error) {
-	metapath, err := m.MetadataPath()
+	_, metapath, err := m.MetadataPath()
 	if err != nil {
 		return "", err
 	}
@@ -193,7 +202,7 @@ var OverlayMountOptions = "index=off,xino=on,userxattr"
 // Mount mounts an overlay at dest, with writeable overlay as per m.config
 func (m Molecule) Mount(dest string) error {
 
-	metadir, err := m.MetadataPath()
+	_, metadir, err := m.MetadataPath()
 	if err != nil {
 		return errors.Wrapf(err, "can't find metadata path")
 	}
@@ -318,7 +327,7 @@ func UmountWithMetadir(dest, metadirArg string) error {
 		},
 	}
 
-	metadir, err := mol.MetadataPath()
+	runtimedir, metadir, err := mol.MetadataPath()
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -423,7 +432,7 @@ func UmountWithMetadir(dest, metadirArg string) error {
 	if err != nil {
 		return err
 	}
-	destMetaDir := filepath.Join(common.RuntimeDir(metadir), "meta", mountNSName, common.ReplacePathSeparators(dest))
+	destMetaDir := filepath.Join(common.RuntimeDir(runtimedir), "meta", mountNSName, common.ReplacePathSeparators(dest))
 	if err := os.RemoveAll(destMetaDir); err != nil {
 		return err
 	}
