@@ -1,0 +1,75 @@
+run:
+  timeout: 60m
+
+linters:
+  enable-all: true
+  disable:
+    - gomnd
+    - funlen
+    - gocognit
+    - paralleltest
+    - forbidigo
+    - ireturn
+    - wrapcheck
+    - exhaustive
+    - maintidx
+    - exhaustruct
+    - rowserrcheck
+    - sqlclosecheck
+    - revive
+    - musttag
+    - depguard
+    - execinquery
+    - inamedparam
+    - intrange
+    - promlinter
+    - protogetter
+    - contextcheck # needs to revisit: https://github.com/project-zot/zot/pull/2556
+    - copyloopvar # needs to revisit: https://github.com/project-zot/zot/pull/2556
+    - typecheck
+    - exportloopref
+
+linters-settings:
+  dupl:
+    threshold: 200
+  nestif:
+    min-complexity: 26
+  cyclop:
+    max-complexity: 40
+    skip-tests: true
+  varnamelen:
+    check-return: true
+    ignore-type-assert-ok: true
+    ignore-map-index-ok: true
+    ignore-chan-recv-ok: true
+    ignore-names:
+      - err
+      - ok
+      - gc
+      - wg
+    ignore-decls:
+      - n int
+      - i int
+      - r *os.File
+      - w *os.File
+      - to int64
+  gci:
+    sections:
+      - standard
+      - default
+  wsl:
+    allow-assign-and-anything: true
+    force-err-cuddling: true
+  nolintlint:
+    allow-unused: true
+  mnd:
+    checks:
+      - argument
+      - case
+      - condition
+      - operation
+      - return
+      - assign
+    ignored-numbers:
+      - "10"
+      - "64"
