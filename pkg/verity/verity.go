@@ -120,8 +120,8 @@ func (verity verityDeviceType) Unmanaged() (unsafe.Pointer, func()) {
 	cParams.data_block_size = C.uint(os.Getpagesize())
 	cParams.hash_block_size = C.uint(os.Getpagesize())
 
-	cParams.data_size = C.ulong(verity.HashOffset / uint64(os.Getpagesize()))
-	cParams.hash_area_offset = C.ulong(verity.HashOffset)
+	cParams.data_size = C.uint64_t(verity.HashOffset / uint64(os.Getpagesize()))
+	cParams.hash_area_offset = C.uint64_t(verity.HashOffset)
 	cParams.fec_area_offset = 0
 	cParams.hash_type = 1 // use format version 1 (i.e. "modern", non chrome-os)
 	cParams.flags = C.uint(verity.Flags)
