@@ -1,6 +1,7 @@
 on:
   push:
   pull_request:
+  workflow_call:
 name: build
 jobs:
   build:
@@ -10,11 +11,11 @@ jobs:
     name: build
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
       - name: Set up golang
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v6
         with:
-          go-version: 1.21
+          go-version: 1.24
       - name: install dependencies
         run: |
           sudo apt-get update
@@ -23,7 +24,7 @@ jobs:
           squashfuse squashfs-tools erofs-utils
       - name: setup lxc
         run: |
-          chmod ugo+x $HOME
+          chmod ugo+x "$HOME"
           cat /etc/subuid /etc/subgid
           u=$(id -un) && g=$(id -gn)
           echo "u=$u g=$g"
@@ -73,7 +74,7 @@ jobs:
           files: ./unit-coverage.txt,./integ-coverage.txt
           token: ${{ secrets.CODECOV_TOKEN }} # required
       - name: Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
