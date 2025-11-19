@@ -111,7 +111,7 @@ func (verity verityDeviceType) Unmanaged() (unsafe.Pointer, func()) {
 	cParams.fec_device = nil
 	cParams.fec_roots = 0
 
-	cParams.salt_size = 32 // DEFAULT_VERITY_SALT_SIZE for x86
+	cParams.salt_size = 32 // DEFAULT_VERITY_SALT_SIZE
 	cParams.salt = nil
 
 	// these can't be larger than a page size, but we want them to be as
