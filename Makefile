@@ -8,13 +8,15 @@ endif
 ROOT := $(shell git rev-parse --show-toplevel)
 GO_SRC_DIRS := $(shell find . -name "*.go" | xargs -n1 dirname | sort -u)
 GO_SRC := $(shell find . -name "*.go")
+GOARCH := $(shell go env GOARCH)
+GOOS := $(shell go env GOOS)
 VERSION_LDFLAGS=-X main.Version=$(MAIN_VERSION)
 BATS = $(TOOLS_D)/bin/bats
 BATS_VERSION := v1.10.0
 PRE_EROFS_STACKER = $(TOOLS_D)/bin/pre-erofs-stacker
 PRE_EROFS_STACKER_VERSION := v1.0.0
 STACKER = $(TOOLS_D)/bin/stacker
-STACKER_VERSION := v1.1.0-rc1
+STACKER_VERSION := v1.1.3
 TOOLS_D := $(ROOT)/tools
 GOCOVERDIR ?= $(ROOT)
 
@@ -43,7 +45,7 @@ $(PRE_EROFS_STACKER):
 
 $(STACKER):
 	mkdir -p $(TOOLS_D)/bin
-	wget --progress=dot:giga https://github.com/project-stacker/stacker/releases/download/$(STACKER_VERSION)/stacker --output-document $(TOOLS_D)/bin/stacker
+	wget --progress=dot:giga https://github.com/project-stacker/stacker/releases/download/$(STACKER_VERSION)/stacker-$(GOOS)-$(GOARCH) --output-document $(TOOLS_D)/bin/stacker
 	chmod +x $(TOOLS_D)/bin/stacker
 
 $(BATS):

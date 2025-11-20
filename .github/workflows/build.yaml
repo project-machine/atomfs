@@ -6,10 +6,13 @@ name: build
 jobs:
   build:
     strategy:
+      fail-fast: true
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
-    name: build
-    runs-on: ${{ matrix.os }}
+        platform:
+          - linux-amd64  # ubuntu 24.04
+          - linux-arm64  # ubuntu 24.04-arm64
+    runs-on: ${{ matrix.platform == 'linux-amd64' && 'ubuntu-24.04' || matrix.platform == 'linux-arm64' && 'ubuntu-24.04-arm' }}
+    name: build-${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v5
       - name: Set up golang
@@ -63,7 +66,7 @@ jobs:
           go get -v ./...
           make atomfs
           cp ./bin/atomfs ~/bin
-          cp ./bin/atomfs atomfs-${{ matrix.os }}
+          cp ./bin/atomfs atomfs-${{ matrix.platform }}
       - name: test
         run: |
           make batstest
@@ -78,4 +81,4 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            atomfs-${{ matrix.os }}
+            atomfs-${{ matrix.platform }}

@@ -16,6 +16,10 @@ function setup() {
     mkdir -p $MP
 }
 
+function require_x86() {
+    [ "$(uname -m)" = "x86_64" ] || skip "test expected ARCH=x86_64 found ARCH=$(uname -m)"
+}
+
 @test "RO mount/umount and verify of good image works" {
     run atomfs-cover --debug mount ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
     assert_success
@@ -123,6 +127,8 @@ function setup() {
 
 
 @test "mount of image built with pre-erofs stacker works" {
+
+    require_x86
 
     cp -r ${BATS_SUITE_TMPDIR}/oci-pre-erofs /tmp/1-test-preerofs
 
