@@ -142,7 +142,7 @@ func parseSuperblock(b []byte) (*superblock, error) {
 
 	magic := binary.LittleEndian.Uint32(b[0:4])
 	if magic != superblockMagic {
-		return nil, errors.Errorf("superblock had magic of %d instead of expected %d", magic, superblockMagic)
+		return nil, errors.Errorf("superblock had magic of %d instead of expected %d", magic, uint32(superblockMagic))
 	}
 
 	sb := &superblock{
