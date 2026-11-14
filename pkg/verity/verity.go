@@ -454,11 +454,17 @@ func ConfirmExistingVerityDeviceCurrentValidity(devicePath string) error {
 
 	params := C.GoString(cParams)
 
-	if len(params) != 1 {
-		return errors.Errorf("invalid params for dm status for %q: %+v", device, params)
+	// Since Linux kernel 6.19 the Verity Status Params returns two fields
+	// the (V)erified or (C)orrupted and whether FEC (forward-error-correction)
+	// has been enabled.
+	fields := strings.Fields(params)
+
+	if len(fields) < 1 || len(fields) > 2 {
+		return errors.Errorf("invalid params for dm status, expected 1 or 2, got %d for device %q params='%+v'", len(fields), device, fields)
 	}
+
 	// valid values are "C": corruption has been found, or "V": no corruption found, yet.
-	if params != "V" {
+	if fields[0] != "V" {
 		return errors.Errorf("verity reports corruption on device %q", device)
 	}
 	return nil
