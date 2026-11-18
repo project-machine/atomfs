@@ -8,8 +8,8 @@ endif
 ROOT := $(shell git rev-parse --show-toplevel)
 GO_SRC_DIRS := $(shell find . -name "*.go" | xargs -n1 dirname | sort -u)
 GO_SRC := $(shell find . -name "*.go")
-GOARCH := $(shell go env GOARCH)
-GOOS := $(shell go env GOOS)
+GOARCH = $(shell go env GOARCH)
+GOOS = $(shell go env GOOS)
 VERSION_LDFLAGS=-X main.Version=$(MAIN_VERSION)
 BATS = $(TOOLS_D)/bin/bats
 BATS_VERSION := v1.10.0
@@ -87,6 +87,9 @@ toolsclean:
 clean:  toolsclean
 	rm -rf $(ROOT)/bin
 	rm -f .made-*
+	rm -f test/random.txt
+	rm -f $(GOCOVERDIR)/covmeta.* $(GOCOVERDIR)/covcounters.*
+	rm -f $(ROOT)/unit-coverage.txt $(ROOT)/integ-coverage.txt
 
 debug:
 	@echo MAIN_VERSION=$(MAIN_VERSION)
