@@ -16,7 +16,7 @@ import (
 var mountCmd = cli.Command{
 	Name:      "mount",
 	Usage:     "mount atomfs image",
-	ArgsUsage: "ocidir:tag target",
+	ArgsUsage: "ocidir:tag[@sha256:digest] target",
 	Action:    doMount,
 	Flags: []cli.Flag{
 		cli.StringFlag{
@@ -39,25 +39,33 @@ var mountCmd = cli.Command{
 }
 
 func mountUsage(_ string) error {
-	return errors.New("Usage: atomfs mount [--writeable] [--persist=/tmp/upperdir] ocidir:tag target")
+	return errors.New("Usage: atomfs mount [--writeable] [--persist=/tmp/upperdir] ocidir:tag[@sha256:digest] target")
 }
 
-func findImage(ctx *cli.Context) (string, string, error) {
-	arg := ctx.Args()[0]
+func findImage(arg string) (string, string, string, error) {
+	var expectedManifestSHA256 string
+	if at := strings.LastIndex(arg, "@"); at >= 0 {
+		digest := arg[at+1:]
+		if !strings.HasPrefix(digest, "sha256:") || len(digest) == len("sha256:") {
+			return "", "", "", errors.Errorf("invalid image digest %q: expected @sha256:<digest>", arg[at:])
+		}
+		expectedManifestSHA256 = digest
+		arg = arg[:at]
+	}
+
 	r := strings.SplitN(arg, ":", 2)
 	if len(r) != 2 {
-		return "", "", mountUsage(ctx.App.Name)
+		return "", "", "", mountUsage("atomfs")
 	}
 	ocidir := r[0]
 	tag := r[1]
 	if !common.PathExists(ocidir) {
-		return "", "", fmt.Errorf("oci directory %s does not exist: %w", ocidir, mountUsage(ctx.App.Name))
+		return "", "", "", fmt.Errorf("oci directory %s does not exist: %w", ocidir, mountUsage("atomfs"))
 	}
-	return ocidir, tag, nil
+	return ocidir, tag, expectedManifestSHA256, nil
 }
 
 func doMount(ctx *cli.Context) error {
-
 	if ctx.NArg() != 2 {
 		return mountUsage(ctx.App.Name)
 	}
@@ -75,7 +83,7 @@ func doMount(ctx *cli.Context) error {
 		return errors.Wrapf(err, "invalid mountpoint %q", absTarget)
 	}
 
-	ocidir, tag, err := findImage(ctx)
+	ocidir, tag, expectedManifestSHA256, err := findImage(ctx.Args()[0])
 	if err != nil {
 		return err
 	}
@@ -111,7 +119,12 @@ func doMount(ctx *cli.Context) error {
 		MetadataDir:            ctx.String("metadir"), // nil here means /run/atomfs
 	}
 
-	mol, err := molecule.BuildMoleculeFromOCI(opts)
+	var mol molecule.Molecule
+	if expectedManifestSHA256 == "" {
+		mol, err = molecule.BuildMoleculeFromOCI(opts)
+	} else {
+		mol, err = molecule.BuildMoleculeFromOCIHash(opts, expectedManifestSHA256)
+	}
 	if err != nil {
 		return errors.Wrapf(err, "couldn't build molecule with opts %+v", opts)
 	}

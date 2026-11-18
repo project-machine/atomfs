@@ -20,6 +20,27 @@ function require_x86() {
     [ "$(uname -m)" = "x86_64" ] || skip "test expected ARCH=x86_64 found ARCH=$(uname -m)"
 }
 
+@test "ls lists tags and its SHA-256 reference can be mounted" {
+    layout=${BATS_SUITE_TMPDIR}/oci
+
+    run atomfs-cover ls "$layout"
+    assert_success
+    assert_line "test-squashfs"
+
+    run atomfs-cover ls --sha256 "$layout"
+    assert_success
+    assert_line --regexp '^test-squashfs@sha256:[0-9a-f]{64}$'
+
+    image_ref=$(printf '%s\n' "$output" | sed -n '/^test-squashfs@sha256:/p')
+    [ -n "$image_ref" ]
+    run atomfs-cover --debug mount "${layout}:${image_ref}" "$MP"
+    assert_success
+    assert_file_exists "$MP/1.README.md"
+
+    run atomfs-cover --debug umount "$MP"
+    assert_success
+}
+
 @test "RO mount/umount and verify of good image works" {
     run atomfs-cover --debug mount ${BATS_SUITE_TMPDIR}/oci:test-squashfs $MP
     assert_success

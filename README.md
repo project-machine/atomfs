@@ -23,6 +23,19 @@ atomfs mount containers/oci:minbase:latest mnt
 atomfs umount mnt
 ```
 
+Use `atomfs ls` to list the tags in an OCI layout. Pass `--sha256` to include
+each tag's manifest SHA-256 hash; those references can be copied directly into
+`atomfs mount` to pin a tag to that manifest:
+
+```bash
+$ mkdir -p mnt
+$ atomfs ls containers/oci
+minbase:latest
+$ atomfs ls --sha256 containers/oci
+minbase:latest@sha256:<manifest-digest>
+$ atomfs mount containers/oci:minbase:latest@sha256:<manifest-digest> mnt
+```
+
 Longer example:
 
 ```bash
