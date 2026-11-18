@@ -18,6 +18,7 @@ container root but not host root, then squashfuse will be used.
 Example:
 
 ```bash
+$ mkdir -p mnt
 atomfs mount containers/oci:minbase:latest mnt
 atomfs umount mnt
 ```
@@ -25,6 +26,7 @@ atomfs umount mnt
 Longer example:
 
 ```bash
+$ mkdir -p dest
 $ lxc-usernsexec -s
 $ atomfs mount zothub:busybox-squashfs dest
 $ ls dest

@@ -72,7 +72,6 @@ func (m Molecule) mountUnderlyingAtoms() (error, func()) {
 			}
 		}
 	}
-	noop := func() {}
 
 	for _, a := range m.Atoms {
 		target, err := m.MountedAtomsPath(a.Digest.Encoded())
@@ -89,7 +88,16 @@ func (m Molecule) mountUnderlyingAtoms() (error, func()) {
 		if !m.config.AllowMissingVerityData {
 
 			if rootHash == "" {
-				return errors.Errorf("%v has no root hash in %q or %q, see: %+v", a.Digest, verity.VerityRootHashAnnotation, verity.VerityRootHashAnnotation_Previous, a.Annotations), cleanupAtoms
+				rootHashAnnotationNames := fmt.Sprintf(
+					"%q or %q", verity.VerityRootHashAnnotation, verity.VerityRootHashAnnotation_Previous)
+				noVerityData := "if the image intentionally has no dm-verity data, retry with --allow-missing-verity."
+				return errors.Errorf(
+					"%v has no root hash in %s; %s Annotations: %+v",
+					a.Digest,
+					rootHashAnnotationNames,
+					noVerityData,
+					a.Annotations,
+				), cleanupAtoms
 			}
 			if !common.AmHostRoot() {
 				return errors.Errorf("won't guestmount an image with verity data without --allow-missing-verity"), cleanupAtoms
@@ -136,7 +144,7 @@ func (m Molecule) mountUnderlyingAtoms() (error, func()) {
 		atomsMounted = append(atomsMounted, target)
 	}
 
-	return nil, noop
+	return nil, cleanupAtoms
 }
 
 // overlayArgs - returns a colon-separated string of dirs to be used as mount
@@ -184,7 +192,8 @@ func makeLock(lockdir string) (*os.File, error) {
 	if err == nil {
 		return lockfile, nil
 	}
-	// backup plan: lock the destination as ${path}.atomfs-lock
+	// This fallback only coordinates callers using the same lockdir; it does
+	// not coordinate with callers that opened advisoryLockPath.
 	lockdir = strings.TrimSuffix(lockdir, "/")
 	lockPath := filepath.Join(lockdir, ".atomfs-lock")
 	var err2 error
@@ -201,18 +210,51 @@ var OverlayMountOptions = "index=off,xino=on,userxattr"
 
 // Mount mounts an overlay at dest, with writeable overlay as per m.config
 func (m Molecule) Mount(dest string) error {
+	absDest, err := filepath.Abs(dest)
+	if err != nil {
+		return errors.Wrapf(err, "failed resolving mountpoint %q", dest)
+	}
+	dest = absDest
+	// Make sure the target directory exists before attempting mounts.
+	if err := common.PathIsDir(dest); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return errors.Wrapf(err, "mountpoint %q does not exist; create it before mounting", dest)
+		}
+		return errors.Wrapf(err, "invalid mountpoint %q", dest)
+	}
 
 	_, metadir, err := m.MetadataPath()
 	if err != nil {
 		return errors.Wrapf(err, "can't find metadata path")
 	}
+	// Existing metadata may belong to an active or incomplete mount. Leave it
+	// untouched; failed mounts must clean their own state before a retry.
 	if common.PathExists(metadir) {
 		return fmt.Errorf("%q exists: cowardly refusing to mess with it", metadir)
 	}
-
-	if err := common.EnsureDir(metadir); err != nil {
+	// Create parent directories first so os.Mkdir below can atomically create
+	// metadir or fail if it already exists.
+	if err := common.EnsureDir(filepath.Dir(metadir)); err != nil {
 		return err
 	}
+	// If the metadata directory already exists, refuse to use it.
+	if err := os.Mkdir(metadir, 0755); err != nil {
+		if os.IsExist(err) {
+			return fmt.Errorf("%q exists: cowardly refusing to mess with it", metadir)
+		}
+		return err
+	}
+	complete := false
+
+	// Clean up the metadata directory if the mount fails.
+	defer func() {
+		if !complete {
+			log.Errorf("Failure detected: cleaning up %q", metadir)
+			if err := os.RemoveAll(metadir); err != nil {
+				log.Errorf("failed to remove metadata directory %q: %s", metadir, err)
+			}
+		}
+	}()
 
 	lockfile, err := makeLock(metadir)
 	if err != nil {
@@ -230,22 +272,16 @@ func (m Molecule) Mount(dest string) error {
 		return err
 	}
 
-	complete := false
-
-	defer func() {
-		if !complete {
-			log.Errorf("Failure detected: cleaning up %q", metadir)
-			os.RemoveAll(metadir)
-		}
-	}()
-
 	err, cleanupUnderlyingAtoms := m.mountUnderlyingAtoms()
 	if err != nil {
+		// If one of the atom mounts fails, we must run cleanup.
+		cleanupUnderlyingAtoms()
 		return err
 	}
 
 	defer func() {
 		if !complete {
+			// Also release the atoms if configuration or overlay mounting fails.
 			cleanupUnderlyingAtoms()
 		}
 	}()
