@@ -3,6 +3,8 @@ package oci
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"path/filepath"
 	"testing"
@@ -86,4 +88,25 @@ func TestLookupManifestWithRawUnknownTag(t *testing.T) {
 
 	_, _, err = LookupManifestWithRaw(oci, "missing-tag")
 	require.Error(t, err)
+}
+
+func TestListTagManifestSHA256ReturnsSortedTagsAndRawManifestDigests(t *testing.T) {
+	layoutDir, _, rawManifest := createTestOCIImage(t)
+	oci, err := umoci.OpenLayout(layoutDir)
+	require.NoError(t, err)
+	defer oci.Close()
+
+	index, err := oci.GetIndex(context.Background())
+	require.NoError(t, err)
+	require.Len(t, index.Manifests, 1)
+	require.NoError(t, oci.UpdateReference(context.Background(), "alpha", index.Manifests[0]))
+
+	digest := sha256.Sum256(rawManifest)
+	wantDigest := hex.EncodeToString(digest[:])
+	got, err := ListTagManifestSHA256(oci)
+	require.NoError(t, err)
+	require.Equal(t, []TagManifestSHA256{
+		{Tag: "alpha", SHA256: wantDigest},
+		{Tag: testImageTag, SHA256: wantDigest},
+	}, got)
 }

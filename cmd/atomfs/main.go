@@ -13,9 +13,10 @@ var Version string
 func main() {
 	app := cli.NewApp()
 	app.Name = "atomfs"
-	app.Usage = "mount and unmount atomfs filesystems"
+	app.Usage = "list, mount, verify, and unmount atomfs filesystems"
 	app.Version = Version
 	app.Commands = []cli.Command{
+		lsCmd,
 		mountCmd,
 		umountCmd,
 		verifyCmd,

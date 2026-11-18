@@ -3,13 +3,69 @@ package oci
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
+	"sort"
 
 	ispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/umoci/oci/casext"
 	"github.com/opencontainers/umoci/oci/casext/mediatype"
 	"github.com/pkg/errors"
 )
+
+type TagManifestSHA256 struct {
+	Tag    string
+	SHA256 string
+}
+
+// ListTagManifestSHA256 lists image-manifest references in an OCI layout and
+// computes the SHA-256 of each manifest's raw bytes.
+func ListTagManifestSHA256(oci casext.Engine) ([]TagManifestSHA256, error) {
+	ctx := context.Background()
+	index, err := oci.GetIndex(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed reading OCI layout index")
+	}
+
+	var refs []TagManifestSHA256
+	for _, descriptor := range index.Manifests {
+		tag, ok := descriptor.Annotations[ispec.AnnotationRefName]
+		if !ok {
+			continue
+		}
+		if descriptor.MediaType != ispec.MediaTypeImageManifest {
+			return nil, errors.Errorf("tag %q points to unsupported manifest media type %q", tag, descriptor.MediaType)
+		}
+
+		reader, err := oci.GetVerifiedBlob(ctx, descriptor)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed reading manifest for tag %q", tag)
+		}
+		rawManifest, readErr := io.ReadAll(reader)
+		closeErr := reader.Close()
+		if readErr != nil {
+			return nil, errors.Wrapf(readErr, "failed reading manifest for tag %q", tag)
+		}
+		if closeErr != nil {
+			return nil, errors.Wrapf(closeErr, "failed verifying manifest for tag %q", tag)
+		}
+
+		digest := sha256.Sum256(rawManifest)
+		refs = append(refs, TagManifestSHA256{
+			Tag:    tag,
+			SHA256: hex.EncodeToString(digest[:]),
+		})
+	}
+
+	sort.Slice(refs, func(i, j int) bool {
+		if refs[i].Tag == refs[j].Tag {
+			return refs[i].SHA256 < refs[j].SHA256
+		}
+		return refs[i].Tag < refs[j].Tag
+	})
+	return refs, nil
+}
 
 func LookupManifest(oci casext.Engine, tag string) (ispec.Manifest, error) {
 	manifest, _, err := LookupManifestWithRaw(oci, tag)
