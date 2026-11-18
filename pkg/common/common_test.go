@@ -2,6 +2,7 @@ package common
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -66,4 +67,18 @@ func TestIsEmpytDir(t *testing.T) {
 	v, e = IsEmptyDir(dname)
 	assert.NoError(e)
 	assert.True(v)
+}
+
+func TestPathIsDir(t *testing.T) {
+	dir := t.TempDir()
+	assert.NoError(t, PathIsDir(dir))
+
+	file := filepath.Join(dir, "file")
+	assert.NoError(t, os.WriteFile(file, nil, 0600))
+	assert.ErrorContains(t, PathIsDir(file), "is not a directory")
+
+	missing := filepath.Join(dir, "missing")
+	err := PathIsDir(missing)
+	assert.ErrorIs(t, err, os.ErrNotExist)
+	assert.ErrorContains(t, err, "does not exist")
 }

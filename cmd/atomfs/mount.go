@@ -58,8 +58,21 @@ func findImage(ctx *cli.Context) (string, string, error) {
 
 func doMount(ctx *cli.Context) error {
 
-	if len(ctx.Args()) == 0 {
+	if ctx.NArg() != 2 {
 		return mountUsage(ctx.App.Name)
+	}
+
+	target := ctx.Args()[1]
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return err
+	}
+	// Verify the specified mountpoint path exists before attempting any mounts.
+	if err := common.PathIsDir(absTarget); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return errors.Wrapf(err, "mountpoint %q does not exist; create it before mounting", absTarget)
+		}
+		return errors.Wrapf(err, "invalid mountpoint %q", absTarget)
 	}
 
 	ocidir, tag, err := findImage(ctx)
@@ -74,11 +87,6 @@ func doMount(ctx *cli.Context) error {
 		fmt.Println("\tunshare -Umr -- /bin/bash")
 		fmt.Println("then run from that shell")
 		os.Exit(1)
-	}
-	target := ctx.Args()[1]
-	absTarget, err := filepath.Abs(target)
-	if err != nil {
-		return err
 	}
 
 	absOCIDir, err := filepath.Abs(ocidir)
@@ -108,9 +116,9 @@ func doMount(ctx *cli.Context) error {
 		return errors.Wrapf(err, "couldn't build molecule with opts %+v", opts)
 	}
 
-	err = mol.Mount(target)
+	err = mol.Mount(absTarget)
 	if err != nil {
-		return errors.Wrapf(err, "couldn't mount molecule at mntpt %q ", target)
+		return errors.Wrapf(err, "couldn't mount molecule at mntpt %q ", absTarget)
 	}
 
 	return nil

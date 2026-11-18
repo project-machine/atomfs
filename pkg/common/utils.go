@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -16,6 +17,20 @@ func EnsureDir(dir string) error {
 	err := os.MkdirAll(dir, 0755)
 	if err != nil {
 		return fmt.Errorf("Failed creating directory %s: %w", dir, err)
+	}
+	return nil
+}
+
+func PathIsDir(path string) error {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return errors.Wrapf(err, "path %q does not exist", path)
+	}
+	if err != nil {
+		return errors.Wrapf(err, "failed to stat path %q", path)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("path %q is not a directory", path)
 	}
 	return nil
 }
