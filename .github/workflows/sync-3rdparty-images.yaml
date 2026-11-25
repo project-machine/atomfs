@@ -1,0 +1,34 @@
+name: 'Sync images and artifacts to ghcr'
+on:
+  schedule:
+    - cron: '30 1 * * *'
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  sync:
+    name: "images"
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup oras
+        uses: oras-project/setup-oras@v2
+      - name: Log in to GitHub Docker Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tag and push to ghcr
+        run: |
+          set -e
+          for n in busybox:stable:
+            dest="ghcr.io/${{ github.repository_owner }}/$n"
+            oras cp --debug --no-tty public.ecr.aws/docker/library/$n $dest
+          done
