@@ -19,6 +19,8 @@ STACKER = $(TOOLS_D)/bin/stacker
 STACKER_VERSION := v1.1.3
 TOOLS_D := $(ROOT)/tools
 GOCOVERDIR ?= $(ROOT)
+# Mirror setup in .github/workflows/sync-3rdparty-images.yaml
+OCI_REGISTRY ?= docker://ghcr.io/project-machine
 
 export PATH := $(TOOLS_D)/bin:$(PATH)
 
@@ -70,7 +72,7 @@ testimages: /tmp/atomfs-test-oci/.copydone
 	@echo "busybox image exists at /tmp/atomfs-test-oci already"
 
 /tmp/atomfs-test-oci/.copydone:
-	skopeo copy docker://public.ecr.aws/docker/library/busybox:stable oci:/tmp/atomfs-test-oci:busybox
+	skopeo copy $(OCI_REGISTRY)/busybox:stable oci:/tmp/atomfs-test-oci:busybox
 	touch $@
 
 test/random.txt:
