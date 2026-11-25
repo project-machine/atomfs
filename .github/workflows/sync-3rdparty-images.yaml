@@ -27,8 +27,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Tag and push to ghcr
         run: |
+          set -x
           set -e
-          for n in busybox:stable:
+          for n in busybox:stable; do
             dest="ghcr.io/${{ github.repository_owner }}/$n"
             oras cp --debug --no-tty public.ecr.aws/docker/library/$n $dest
           done
